@@ -2,12 +2,16 @@
 module.exports = {
   darkMode: ["class"],
   content: [
-    "./pages/**/*.{ts,tsx,js,jsx,mdx}",
-    "./components/**/*.{ts,tsx,js,jsx,mdx}",
-    "./app/**/*.{ts,tsx,js,jsx,mdx}",
-    "./src/**/*.{ts,tsx}",
-      "*.{js,ts,jsx,tsx,mdx}"
-],
+    "./src/app/**/*.{ts,tsx,js,jsx,mdx}",
+    "./src/components/**/*.{ts,tsx,js,jsx,mdx}",
+    "./src/features/**/*.{ts,tsx,js,jsx,mdx}",
+    "./src/contexts/**/*.{ts,tsx,js,jsx,mdx}",
+    "./src/hooks/**/*.{ts,tsx,js,jsx,mdx}",
+    "./src/lib/**/*.{ts,tsx,js,jsx,mdx}",
+    "./src/services/**/*.{ts,tsx,js,jsx,mdx}",
+    "./src/styles/**/*.{ts,tsx,js,jsx,mdx}",
+    "./*.{js,ts,jsx,tsx,mdx}"
+  ],
   theme: {
     container: {
       center: true,
