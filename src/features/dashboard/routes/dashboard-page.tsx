@@ -7,7 +7,7 @@ import { fetchAccounts } from "@/features/accounts/accountsSlice"
 import { fetchTransactions } from "@/features/transactions/transactionsSlice"
 import { AccountsOverview } from "@/features/accounts/components/accounts-overview"
 import { RecentTransactions } from "@/features/transactions/components/recent-transactions"
-import { QuickBillPay } from "@/features/dashboard/components/quick-bill-pay"
+import { CalendarEventsWidget } from "@/features/dashboard/components/calendar-events-widget"
 import { BusinessMetrics } from "@/features/dashboard/components/business-metrics"
 
 export default function Dashboard() {
@@ -44,7 +44,7 @@ export default function Dashboard() {
           <RecentTransactions />
         </div>
         <div className="lg:col-span-1">
-          <QuickBillPay />
+          <CalendarEventsWidget />
         </div>
       </div>
 

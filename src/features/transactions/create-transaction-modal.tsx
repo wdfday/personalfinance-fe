@@ -10,33 +10,29 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { Switch } from "@/components/ui/switch"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
 import { toast } from "sonner"
+import type { CreateTransactionRequest, TransactionDirection, TransactionInstrument, TransactionSource } from "@/types/api"
 
+// Direction-based model schema
 const createTransactionSchema = z.object({
-  account_id: z.string().uuid("ID tài khoản không hợp lệ"),
-  from_account_id: z.string().uuid().optional().or(z.literal('')),
-  to_account_id: z.string().uuid().optional().or(z.literal('')),
-  transaction_type: z.enum(["income", "expense", "transfer"], {
+  accountId: z.string().min(1, "Vui lòng chọn tài khoản"),
+  direction: z.enum(["DEBIT", "CREDIT"], {
     required_error: "Vui lòng chọn loại giao dịch",
   }),
-  amount: z.number().min(0.01, "Số tiền phải > 0"),
-  currency: z.string().length(3, "Mã tiền tệ phải 3 ký tự").optional(),
-  category_id: z.string().uuid().optional().or(z.literal('')),
-  description: z.string().max(500, "Mô tả tối đa 500 ký tự").optional(),
-  notes: z.string().optional(),
-  transaction_date: z.string().optional(),
-  status: z.enum(["pending", "completed", "cancelled", "failed"]).optional(),
-  payment_method: z.enum(["cash", "bank_transfer", "debit_card", "credit_card", "mobile_payment", "check", "other"]).optional(),
-  receipt_url: z.string().url("URL không hợp lệ").optional().or(z.literal('')),
-  location: z.string().optional(),
-  merchant_name: z.string().optional(),
-  merchant_category: z.string().optional(),
-  is_recurring: z.boolean().default(false),
-  recurring_frequency: z.enum(["daily", "weekly", "monthly", "yearly"]).optional(),
+  instrument: z.enum(["CASH", "BANK_ACCOUNT", "DEBIT_CARD", "CREDIT_CARD", "E_WALLET", "CRYPTO", "UNKNOWN"]).default("BANK_ACCOUNT"),
+  source: z.enum(["BANK_API", "CSV_IMPORT", "JSON_IMPORT", "MANUAL"]).default("MANUAL"),
+  amount: z.number().min(1, "Số tiền phải lớn hơn 0"),
+  currency: z.string().length(3).default("VND"),
+  bookingDate: z.string().min(1, "Vui lòng chọn ngày"),
+  description: z.string().max(500).optional(),
+  userNote: z.string().max(1000).optional(),
+  counterpartyName: z.string().optional(),
+  userCategoryId: z.string().optional(),
+  isTransfer: z.boolean().optional(),
+  tags: z.array(z.string()).optional(),
 })
 
 type CreateTransactionForm = z.infer<typeof createTransactionSchema>
@@ -67,52 +63,40 @@ export function CreateTransactionModal({ isOpen, onClose }: CreateTransactionMod
   } = useForm<CreateTransactionForm>({
     resolver: zodResolver(createTransactionSchema),
     defaultValues: {
-      account_id: "",
-      transaction_type: "expense",
+      accountId: "",
+      direction: "DEBIT",
+      instrument: "BANK_ACCOUNT",
+      source: "MANUAL",
       amount: 0,
       currency: "VND",
+      bookingDate: new Date().toISOString().split('T')[0],
       description: "",
-      transaction_date: new Date().toISOString().split('T')[0],
-      status: "completed",
-      is_recurring: false,
+      userNote: "",
+      isTransfer: false,
     },
   })
 
-  const transactionType = watch("transaction_type")
-  const isRecurring = watch("is_recurring")
+  const direction = watch("direction")
+  const instrument = watch("instrument")
 
   const onSubmit = async (data: CreateTransactionForm) => {
     try {
       setIsSubmitting(true)
-      
-      // Clean up empty optional fields
-      const payload: any = {
-        account_id: data.account_id,
-        transaction_type: data.transaction_type,
+
+      const payload: CreateTransactionRequest = {
+        accountId: data.accountId,
+        direction: data.direction as TransactionDirection,
+        instrument: data.instrument as TransactionInstrument,
+        source: data.source as TransactionSource,
         amount: data.amount,
-        currency: data.currency || "VND",
-        description: data.description || "",
-        is_recurring: data.is_recurring,
-      }
-
-      if (data.transaction_date) {
-        payload.transaction_date = data.transaction_date
-      }
-      
-      if (data.status) payload.status = data.status
-      if (data.payment_method) payload.payment_method = data.payment_method
-      if (data.category_id) payload.category_id = data.category_id
-      if (data.notes) payload.notes = data.notes
-      if (data.receipt_url) payload.receipt_url = data.receipt_url
-      if (data.location) payload.location = data.location
-      if (data.merchant_name) payload.merchant_name = data.merchant_name
-      if (data.merchant_category) payload.merchant_category = data.merchant_category
-      if (data.is_recurring && data.recurring_frequency) payload.recurring_frequency = data.recurring_frequency
-
-      // For transfers
-      if (transactionType === 'transfer') {
-        if (data.from_account_id) payload.from_account_id = data.from_account_id
-        if (data.to_account_id) payload.to_account_id = data.to_account_id
+        currency: data.currency,
+        bookingDate: data.bookingDate,
+        description: data.description,
+        userNote: data.userNote,
+        counterpartyName: data.counterpartyName,
+        userCategoryId: data.userCategoryId || undefined,
+        isTransfer: data.isTransfer,
+        tags: data.tags,
       }
 
       await dispatch(createTransaction(payload)).unwrap()
@@ -141,33 +125,32 @@ export function CreateTransactionModal({ isOpen, onClose }: CreateTransactionMod
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          {/* Type and Account */}
+          {/* Direction and Account */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="transaction_type">Loại giao dịch *</Label>
+              <Label htmlFor="direction">Loại giao dịch *</Label>
               <Select
-                value={transactionType}
-                onValueChange={(value) => setValue("transaction_type", value as CreateTransactionForm['transaction_type'])}
+                value={direction}
+                onValueChange={(value) => setValue("direction", value as "DEBIT" | "CREDIT")}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Chọn loại" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="income">Thu nhập</SelectItem>
-                  <SelectItem value="expense">Chi tiêu</SelectItem>
-                  <SelectItem value="transfer">Chuyển khoản</SelectItem>
+                  <SelectItem value="DEBIT">Chi tiêu (DEBIT)</SelectItem>
+                  <SelectItem value="CREDIT">Thu nhập (CREDIT)</SelectItem>
                 </SelectContent>
               </Select>
-              {errors.transaction_type && (
-                <p className="text-sm text-red-500">{errors.transaction_type.message}</p>
+              {errors.direction && (
+                <p className="text-sm text-red-500">{errors.direction.message}</p>
               )}
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="account_id">Tài khoản *</Label>
+              <Label htmlFor="accountId">Tài khoản *</Label>
               <Select
-                value={watch("account_id")}
-                onValueChange={(value) => setValue("account_id", value)}
+                value={watch("accountId")}
+                onValueChange={(value) => setValue("accountId", value)}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Chọn tài khoản" />
@@ -175,59 +158,51 @@ export function CreateTransactionModal({ isOpen, onClose }: CreateTransactionMod
                 <SelectContent>
                   {accounts.map((account) => (
                     <SelectItem key={account.id} value={account.id}>
-                      {account.account_name} ({account.currency})
+                      {account.accountName} ({account.currency})
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              {errors.account_id && (
-                <p className="text-sm text-red-500">{errors.account_id.message}</p>
+              {errors.accountId && (
+                <p className="text-sm text-red-500">{errors.accountId.message}</p>
               )}
             </div>
           </div>
 
-          {/* Transfer specific fields */}
-          {transactionType === 'transfer' && (
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="from_account_id">Từ tài khoản</Label>
-                <Select
-                  value={watch("from_account_id")}
-                  onValueChange={(value) => setValue("from_account_id", value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Chọn tài khoản nguồn" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {accounts.map((account) => (
-                      <SelectItem key={account.id} value={account.id}>
-                        {account.account_name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="to_account_id">Đến tài khoản</Label>
-                <Select
-                  value={watch("to_account_id")}
-                  onValueChange={(value) => setValue("to_account_id", value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Chọn tài khoản đích" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {accounts.map((account) => (
-                      <SelectItem key={account.id} value={account.id}>
-                        {account.account_name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+          {/* Instrument */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="instrument">Phương thức *</Label>
+              <Select
+                value={instrument}
+                onValueChange={(value) => setValue("instrument", value as TransactionInstrument)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="BANK_ACCOUNT">Tài khoản ngân hàng</SelectItem>
+                  <SelectItem value="CASH">Tiền mặt</SelectItem>
+                  <SelectItem value="E_WALLET">Ví điện tử</SelectItem>
+                  <SelectItem value="DEBIT_CARD">Thẻ ghi nợ</SelectItem>
+                  <SelectItem value="CREDIT_CARD">Thẻ tín dụng</SelectItem>
+                  <SelectItem value="CRYPTO">Crypto</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-          )}
+
+            <div className="space-y-2">
+              <Label htmlFor="bookingDate">Ngày giao dịch *</Label>
+              <Input
+                id="bookingDate"
+                type="date"
+                {...register("bookingDate")}
+              />
+              {errors.bookingDate && (
+                <p className="text-sm text-red-500">{errors.bookingDate.message}</p>
+              )}
+            </div>
+          </div>
 
           {/* Amount and Currency */}
           <div className="grid grid-cols-2 gap-4">
@@ -236,7 +211,7 @@ export function CreateTransactionModal({ isOpen, onClose }: CreateTransactionMod
               <Input
                 id="amount"
                 type="number"
-                step="0.01"
+                step="1"
                 {...register("amount", { valueAsNumber: true })}
                 placeholder="0"
               />
@@ -258,40 +233,19 @@ export function CreateTransactionModal({ isOpen, onClose }: CreateTransactionMod
                   <SelectItem value="VND">VND (₫)</SelectItem>
                   <SelectItem value="USD">USD ($)</SelectItem>
                   <SelectItem value="EUR">EUR (€)</SelectItem>
-                  <SelectItem value="GBP">GBP (£)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
 
-          {/* Date and Status */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="transaction_date">Ngày giao dịch</Label>
-              <Input
-                id="transaction_date"
-                type="date"
-                {...register("transaction_date")}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="status">Trạng thái</Label>
-              <Select
-                value={watch("status")}
-                onValueChange={(value) => setValue("status", value as CreateTransactionForm['status'])}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="completed">Hoàn thành</SelectItem>
-                  <SelectItem value="pending">Đang chờ</SelectItem>
-                  <SelectItem value="cancelled">Đã hủy</SelectItem>
-                  <SelectItem value="failed">Thất bại</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+          {/* Counterparty */}
+          <div className="space-y-2">
+            <Label htmlFor="counterpartyName">Đối tác / Người nhận</Label>
+            <Input
+              id="counterpartyName"
+              {...register("counterpartyName")}
+              placeholder="Tên người nhận hoặc cửa hàng"
+            />
           </div>
 
           {/* Description */}
@@ -307,95 +261,15 @@ export function CreateTransactionModal({ isOpen, onClose }: CreateTransactionMod
             )}
           </div>
 
-          {/* Payment Method */}
-          <div className="space-y-2">
-            <Label htmlFor="payment_method">Phương thức thanh toán</Label>
-            <Select
-              value={watch("payment_method")}
-              onValueChange={(value) => setValue("payment_method", value as CreateTransactionForm['payment_method'])}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Chọn phương thức" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="cash">Tiền mặt</SelectItem>
-                <SelectItem value="bank_transfer">Chuyển khoản</SelectItem>
-                <SelectItem value="debit_card">Thẻ ghi nợ</SelectItem>
-                <SelectItem value="credit_card">Thẻ tín dụng</SelectItem>
-                <SelectItem value="mobile_payment">Ví điện tử</SelectItem>
-                <SelectItem value="check">Séc</SelectItem>
-                <SelectItem value="other">Khác</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Merchant */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="merchant_name">Tên người bán/nhận</Label>
-              <Input
-                id="merchant_name"
-                {...register("merchant_name")}
-                placeholder="Tên cửa hàng, công ty..."
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="location">Địa điểm</Label>
-              <Input
-                id="location"
-                {...register("location")}
-                placeholder="Vị trí giao dịch"
-              />
-            </div>
-          </div>
-
           {/* Notes */}
           <div className="space-y-2">
-            <Label htmlFor="notes">Ghi chú</Label>
+            <Label htmlFor="userNote">Ghi chú</Label>
             <Textarea
-              id="notes"
-              {...register("notes")}
+              id="userNote"
+              {...register("userNote")}
               placeholder="Ghi chú bổ sung"
               rows={2}
             />
-          </div>
-
-          {/* Recurring */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label htmlFor="is_recurring">Giao dịch định kỳ</Label>
-                <p className="text-sm text-muted-foreground">
-                  Lặp lại giao dịch này tự động
-                </p>
-              </div>
-              <Switch
-                id="is_recurring"
-                checked={isRecurring}
-                onCheckedChange={(checked) => setValue("is_recurring", checked)}
-              />
-            </div>
-
-            {isRecurring && (
-              <div className="space-y-2">
-                <Label htmlFor="recurring_frequency">Tần suất</Label>
-                <Select
-                  value={watch("recurring_frequency")}
-                  onValueChange={(value) => setValue("recurring_frequency", value as CreateTransactionForm['recurring_frequency'])}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Chọn tần suất" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="daily">Hàng ngày</SelectItem>
-                    <SelectItem value="weekly">Hàng tuần</SelectItem>
-                    <SelectItem value="monthly">Hàng tháng</SelectItem>
-                    <SelectItem value="yearly">Hàng năm</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
           </div>
 
           <div className="flex justify-end space-x-2 pt-4">

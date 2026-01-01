@@ -1,6 +1,7 @@
 /**
  * API Services Index
  * Export tất cả services để sử dụng trong ứng dụng
+ * Synced with backend API - 2024-12-17
  */
 
 // Export base client
@@ -15,9 +16,13 @@ import { accountsService } from './accounts.service'
 import { transactionsService } from './transactions.service'
 import { budgetsService } from './budgets.service'
 import { goalsService } from './goals.service'
+import { debtsService } from './debts.service'
 import { investmentsService } from './investments.service'
 import { categoriesService } from './categories.service'
 import { summariesService } from './summaries.service'
+import { calendarService } from './calendar.service'
+import { chatService } from './chat.service'
+import { brokersService } from './brokers.service'
 
 // Export auth service
 export { authService }
@@ -60,6 +65,18 @@ export type {
   CryptoInstitution,
 } from './accounts.service'
 
+// Export brokers service
+export { brokersService }
+export type {
+  BrokerConnection,
+  BrokerType,
+  BrokerConnectionStatus,
+  CreateBrokerConnectionRequest,
+  UpdateBrokerConnectionRequest,
+  BrokerListResponse,
+  SyncResult,
+} from './brokers.service'
+
 // Export transactions service
 export { transactionsService }
 export type {
@@ -77,6 +94,7 @@ export type {
   CreateBudgetRequest,
   UpdateBudgetRequest,
   BudgetListResponse,
+  BudgetSummary,
 } from './budgets.service'
 
 // Export goals service
@@ -86,7 +104,20 @@ export type {
   CreateGoalRequest,
   UpdateGoalRequest,
   GoalListResponse,
+  GoalSummary,
+  GoalProgress,
 } from './goals.service'
+
+// Export debts service
+export { debtsService }
+export type {
+  Debt,
+  CreateDebtRequest,
+  UpdateDebtRequest,
+  AddDebtPaymentRequest,
+  DebtListResponse,
+  DebtSummary,
+} from './debts.service'
 
 // Export investments service
 export { investmentsService }
@@ -95,6 +126,7 @@ export type {
   CreateInvestmentRequest,
   UpdateInvestmentRequest,
   InvestmentListResponse,
+  InvestmentSummary,
 } from './investments.service'
 
 // Export categories service
@@ -111,12 +143,43 @@ export { summariesService }
 export type {
   AccountSummary,
   TransactionSummary,
-  BudgetSummary,
-  GoalSummary,
-  InvestmentSummary,
+  BudgetSummary as BudgetSummaryResponse,
+  GoalSummary as GoalSummaryResponse,
+  InvestmentSummary as InvestmentSummaryResponse,
   DashboardSummary,
   TransactionSummaryParams,
 } from './summaries.service'
+
+// Export calendar service
+export { calendarService }
+export type {
+  CalendarEvent,
+  CreateEventRequest as CreateCalendarEventRequest,
+  UpdateEventRequest as UpdateCalendarEventRequest,
+  EventType,
+  EventSource,
+  RecurrenceType,
+  CalendarEventsResponse,
+  CalendarQueryParams,
+  UpcomingEventsParams,
+  GenerateHolidaysRequest,
+} from './calendar.service'
+
+// Export chat service
+export { chatService }
+export type {
+  ChatRequest,
+  ChatResponse,
+  Conversation,
+  ConversationListResponse,
+  ConversationDetailResponse,
+  CreateConversationRequest,
+  ListConversationsParams,
+  StreamEvent,
+  ChatMessage,
+  ChatUIMessage,
+  ChatUIState,
+} from '@/types/chat'
 
 // Re-export tất cả services dưới dạng object
 export const apiServices = {
@@ -127,9 +190,13 @@ export const apiServices = {
   transactions: transactionsService,
   budgets: budgetsService,
   goals: goalsService,
+  debts: debtsService,
   investments: investmentsService,
   categories: categoriesService,
   summaries: summariesService,
+  calendar: calendarService,
+  chat: chatService,
+  brokers: brokersService,
 }
 
 // Default export
@@ -140,13 +207,15 @@ export default apiServices
  * 
  * // Import individual service
  * import { authService } from '@/services/api'
- * await authService.login({ username: 'john', password: '123' })
+ * await authService.login({ email: 'john@example.com', password: '123' })
  * 
  * // Import all services
  * import { apiServices } from '@/services/api'
- * await apiServices.auth.login({ username: 'john', password: '123' })
+ * await apiServices.auth.login({ email: 'john@example.com', password: '123' })
  * 
  * // Import types
  * import type { User, Account, Transaction } from '@/services/api'
+ * 
+ * // Import from centralized types
+ * import type { Budget, Goal, Debt } from '@/types/api'
  */
-

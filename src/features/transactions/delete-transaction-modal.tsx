@@ -13,7 +13,8 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
-import type { Transaction } from "@/services/api"
+import { useTranslation } from "@/contexts/i18n-context"
+import type { Transaction } from "@/types/api"
 
 interface DeleteTransactionModalProps {
   isOpen: boolean
@@ -23,6 +24,8 @@ interface DeleteTransactionModalProps {
 
 export function DeleteTransactionModal({ isOpen, onClose, transaction }: DeleteTransactionModalProps) {
   const dispatch = useAppDispatch()
+  const { t } = useTranslation("transactions")
+  const { t: tCommonActions } = useTranslation("common.actions")
   const [isDeleting, setIsDeleting] = useState(false)
 
   const handleDelete = async () => {
@@ -31,10 +34,10 @@ export function DeleteTransactionModal({ isOpen, onClose, transaction }: DeleteT
     try {
       setIsDeleting(true)
       await dispatch(deleteTransaction(transaction.id)).unwrap()
-      toast.success("Xóa giao dịch thành công!")
+      toast.success(t("modals.delete.success"))
       onClose()
     } catch (error) {
-      toast.error("Lỗi xóa giao dịch: " + error)
+      toast.error(t("modals.delete.error", { values: { error: String(error) } }))
     } finally {
       setIsDeleting(false)
     }
@@ -42,22 +45,27 @@ export function DeleteTransactionModal({ isOpen, onClose, transaction }: DeleteT
 
   if (!transaction) return null
 
+  const description = transaction.description || t("modals.delete.noDescription")
+  const amount = `${transaction.amount.toLocaleString()} ${transaction.currency}`
+
   return (
     <AlertDialog open={isOpen} onOpenChange={onClose}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Bạn có chắc muốn xóa giao dịch này?</AlertDialogTitle>
+          <AlertDialogTitle>{t("modals.delete.title")}</AlertDialogTitle>
           <AlertDialogDescription>
-            Hành động này không thể hoàn tác. Giao dịch <strong>{transaction.description || 'Không có mô tả'}</strong> 
-            {' '}với số tiền <strong>{transaction.amount.toLocaleString()} {transaction.currency}</strong> sẽ bị xóa vĩnh viễn.
+            <span dangerouslySetInnerHTML={{
+              __html: t("modals.delete.description", { values: { description: `<strong>${description}</strong>` } }) + ' ' +
+                      t("modals.delete.amount", { values: { amount: `<strong>${amount}</strong>` } })
+            }} />
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <Button variant="outline" onClick={onClose} disabled={isDeleting}>
-            Hủy
+            {tCommonActions("cancel")}
           </Button>
           <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
-            {isDeleting ? "Đang xóa..." : "Xóa giao dịch"}
+            {isDeleting ? t("modals.delete.confirming") : t("modals.delete.confirm")}
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>

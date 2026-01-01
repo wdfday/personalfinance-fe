@@ -9,29 +9,24 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { Switch } from "@/components/ui/switch"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
 import { toast } from "sonner"
-import type { Transaction } from "@/services/api"
+import type { Transaction, UpdateTransactionRequest, TransactionDirection, TransactionInstrument } from "@/types/api"
 
 const updateTransactionSchema = z.object({
-  account_id: z.string().uuid().optional(),
-  from_account_id: z.string().uuid().optional().or(z.literal('')),
-  to_account_id: z.string().uuid().optional().or(z.literal('')),
-  transaction_type: z.enum(["income", "expense", "transfer"]).optional(),
-  amount: z.number().min(0.01).optional(),
+  accountId: z.string().optional(),
+  direction: z.enum(["DEBIT", "CREDIT"]).optional(),
+  instrument: z.enum(["CASH", "BANK_ACCOUNT", "DEBIT_CARD", "CREDIT_CARD", "E_WALLET", "CRYPTO", "UNKNOWN"]).optional(),
+  amount: z.number().min(1).optional(),
   currency: z.string().length(3).optional(),
+  bookingDate: z.string().optional(),
   description: z.string().max(500).optional(),
-  notes: z.string().optional(),
-  transaction_date: z.string().optional(),
-  status: z.enum(["pending", "completed", "cancelled", "failed"]).optional(),
-  payment_method: z.enum(["cash", "bank_transfer", "debit_card", "credit_card", "mobile_payment", "check", "other"]).optional(),
-  location: z.string().optional(),
-  merchant_name: z.string().optional(),
-  is_recurring: z.boolean().optional(),
-  recurring_frequency: z.enum(["daily", "weekly", "monthly", "yearly"]).optional(),
+  userNote: z.string().max(1000).optional(),
+  counterpartyName: z.string().optional(),
+  userCategoryId: z.string().optional(),
+  isTransfer: z.boolean().optional(),
 })
 
 type UpdateTransactionForm = z.infer<typeof updateTransactionSchema>
@@ -60,41 +55,42 @@ export function EditTransactionModal({ isOpen, onClose, transaction }: EditTrans
 
   useEffect(() => {
     if (transaction) {
-      setValue("account_id", transaction.account_id)
-      setValue("transaction_type", transaction.transaction_type as any)
+      setValue("accountId", transaction.accountId)
+      setValue("direction", transaction.direction)
+      setValue("instrument", transaction.instrument)
       setValue("amount", transaction.amount)
       setValue("currency", transaction.currency)
+      setValue("bookingDate", transaction.bookingDate?.split('T')[0])
       setValue("description", transaction.description || "")
-      setValue("notes", transaction.notes || "")
-      setValue("transaction_date", transaction.transaction_date?.split('T')[0])
-      setValue("status", transaction.status as any)
-      setValue("payment_method", transaction.payment_method as any)
-      setValue("location", transaction.location || "")
-      setValue("merchant_name", transaction.merchant_name || "")
-      setValue("is_recurring", transaction.is_recurring)
-      setValue("recurring_frequency", transaction.recurring_frequency as any)
-      if (transaction.from_account_id) setValue("from_account_id", transaction.from_account_id)
-      if (transaction.to_account_id) setValue("to_account_id", transaction.to_account_id)
+      setValue("userNote", transaction.userNote || "")
+      setValue("counterpartyName", transaction.counterparty?.name || "")
+      setValue("userCategoryId", transaction.classification?.userCategoryId || "")
+      setValue("isTransfer", transaction.classification?.isTransfer || false)
     }
   }, [transaction, setValue])
 
-  const transactionType = watch("transaction_type")
-  const isRecurring = watch("is_recurring")
+  const direction = watch("direction")
+  const instrument = watch("instrument")
 
   const onSubmit = async (data: UpdateTransactionForm) => {
     if (!transaction) return
 
     try {
       setIsSubmitting(true)
-      
-      // Clean up undefined fields
-      const payload: any = {}
-      Object.keys(data).forEach(key => {
-        const value = (data as any)[key]
-        if (value !== undefined && value !== '') {
-          payload[key] = value
-        }
-      })
+
+      const payload: UpdateTransactionRequest = {}
+
+      if (data.accountId) payload.accountId = data.accountId
+      if (data.direction) payload.direction = data.direction as TransactionDirection
+      if (data.instrument) payload.instrument = data.instrument as TransactionInstrument
+      if (data.amount) payload.amount = data.amount
+      if (data.currency) payload.currency = data.currency
+      if (data.bookingDate) payload.bookingDate = data.bookingDate
+      if (data.description !== undefined) payload.description = data.description
+      if (data.userNote !== undefined) payload.userNote = data.userNote
+      if (data.counterpartyName) payload.counterpartyName = data.counterpartyName
+      if (data.userCategoryId) payload.userCategoryId = data.userCategoryId
+      if (data.isTransfer !== undefined) payload.isTransfer = data.isTransfer
 
       await dispatch(updateTransaction({ id: transaction.id, data: payload })).unwrap()
       toast.success("Cập nhật giao dịch thành công!")
@@ -124,30 +120,29 @@ export function EditTransactionModal({ isOpen, onClose, transaction }: EditTrans
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          {/* Similar structure to create modal */}
+          {/* Direction and Account */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="transaction_type">Loại giao dịch</Label>
+              <Label htmlFor="direction">Loại giao dịch</Label>
               <Select
-                value={transactionType}
-                onValueChange={(value) => setValue("transaction_type", value as UpdateTransactionForm['transaction_type'])}
+                value={direction}
+                onValueChange={(value) => setValue("direction", value as "DEBIT" | "CREDIT")}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Chọn loại" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="income">Thu nhập</SelectItem>
-                  <SelectItem value="expense">Chi tiêu</SelectItem>
-                  <SelectItem value="transfer">Chuyển khoản</SelectItem>
+                  <SelectItem value="DEBIT">Chi tiêu (DEBIT)</SelectItem>
+                  <SelectItem value="CREDIT">Thu nhập (CREDIT)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="account_id">Tài khoản</Label>
+              <Label htmlFor="accountId">Tài khoản</Label>
               <Select
-                value={watch("account_id")}
-                onValueChange={(value) => setValue("account_id", value)}
+                value={watch("accountId")}
+                onValueChange={(value) => setValue("accountId", value)}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Chọn tài khoản" />
@@ -155,7 +150,7 @@ export function EditTransactionModal({ isOpen, onClose, transaction }: EditTrans
                 <SelectContent>
                   {accounts.map((account) => (
                     <SelectItem key={account.id} value={account.id}>
-                      {account.account_name} ({account.currency})
+                      {account.accountName} ({account.currency})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -163,13 +158,46 @@ export function EditTransactionModal({ isOpen, onClose, transaction }: EditTrans
             </div>
           </div>
 
+          {/* Instrument and Date */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="instrument">Phương thức</Label>
+              <Select
+                value={instrument}
+                onValueChange={(value) => setValue("instrument", value as TransactionInstrument)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="BANK_ACCOUNT">Tài khoản ngân hàng</SelectItem>
+                  <SelectItem value="CASH">Tiền mặt</SelectItem>
+                  <SelectItem value="E_WALLET">Ví điện tử</SelectItem>
+                  <SelectItem value="DEBIT_CARD">Thẻ ghi nợ</SelectItem>
+                  <SelectItem value="CREDIT_CARD">Thẻ tín dụng</SelectItem>
+                  <SelectItem value="CRYPTO">Crypto</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="bookingDate">Ngày giao dịch</Label>
+              <Input
+                id="bookingDate"
+                type="date"
+                {...register("bookingDate")}
+              />
+            </div>
+          </div>
+
+          {/* Amount and Currency */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="amount">Số tiền</Label>
               <Input
                 id="amount"
                 type="number"
-                step="0.01"
+                step="1"
                 {...register("amount", { valueAsNumber: true })}
               />
             </div>
@@ -187,41 +215,22 @@ export function EditTransactionModal({ isOpen, onClose, transaction }: EditTrans
                   <SelectItem value="VND">VND</SelectItem>
                   <SelectItem value="USD">USD</SelectItem>
                   <SelectItem value="EUR">EUR</SelectItem>
-                  <SelectItem value="GBP">GBP</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="transaction_date">Ngày giao dịch</Label>
-              <Input
-                id="transaction_date"
-                type="date"
-                {...register("transaction_date")}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="status">Trạng thái</Label>
-              <Select
-                value={watch("status")}
-                onValueChange={(value) => setValue("status", value as UpdateTransactionForm['status'])}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="completed">Hoàn thành</SelectItem>
-                  <SelectItem value="pending">Đang chờ</SelectItem>
-                  <SelectItem value="cancelled">Đã hủy</SelectItem>
-                  <SelectItem value="failed">Thất bại</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+          {/* Counterparty */}
+          <div className="space-y-2">
+            <Label htmlFor="counterpartyName">Đối tác / Người nhận</Label>
+            <Input
+              id="counterpartyName"
+              {...register("counterpartyName")}
+              placeholder="Tên người nhận hoặc cửa hàng"
+            />
           </div>
 
+          {/* Description */}
           <div className="space-y-2">
             <Label htmlFor="description">Mô tả</Label>
             <Input
@@ -230,50 +239,12 @@ export function EditTransactionModal({ isOpen, onClose, transaction }: EditTrans
             />
           </div>
 
+          {/* Notes */}
           <div className="space-y-2">
-            <Label htmlFor="payment_method">Phương thức</Label>
-            <Select
-              value={watch("payment_method")}
-              onValueChange={(value) => setValue("payment_method", value as UpdateTransactionForm['payment_method'])}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="cash">Tiền mặt</SelectItem>
-                <SelectItem value="bank_transfer">Chuyển khoản</SelectItem>
-                <SelectItem value="debit_card">Thẻ ghi nợ</SelectItem>
-                <SelectItem value="credit_card">Thẻ tín dụng</SelectItem>
-                <SelectItem value="mobile_payment">Ví điện tử</SelectItem>
-                <SelectItem value="check">Séc</SelectItem>
-                <SelectItem value="other">Khác</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="merchant_name">Tên người bán</Label>
-              <Input
-                id="merchant_name"
-                {...register("merchant_name")}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="location">Địa điểm</Label>
-              <Input
-                id="location"
-                {...register("location")}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="notes">Ghi chú</Label>
+            <Label htmlFor="userNote">Ghi chú</Label>
             <Textarea
-              id="notes"
-              {...register("notes")}
+              id="userNote"
+              {...register("userNote")}
               rows={2}
             />
           </div>
@@ -291,4 +262,3 @@ export function EditTransactionModal({ isOpen, onClose, transaction }: EditTrans
     </Dialog>
   )
 }
-

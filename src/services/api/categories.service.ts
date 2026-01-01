@@ -1,56 +1,52 @@
 /**
  * Categories Service
  * Quản lý danh mục thu chi
+ * Synced with backend API - 2024-12-17
  */
 
 import { baseApiClient } from './base'
-
-// Types
-export interface Category {
-  id: string
-  user_id?: string | number
-  name: string
-  type: 'income' | 'expense' | 'transfer'
-  parent_id?: string
-  icon?: string
-  color?: string
-  is_active: boolean
-  created_at: string
-  updated_at: string
-}
+import type { Category, CategoryType } from '@/types/api'
 
 export interface CreateCategoryRequest {
   name: string
-  type: 'income' | 'expense' | 'transfer'
+  type: CategoryType
   parent_id?: string
-  icon: string
-  color: string
+  icon?: string
+  color?: string
+  description?: string
 }
 
 export interface UpdateCategoryRequest {
   name?: string
-  type?: 'income' | 'expense' | 'transfer'
+  type?: CategoryType
   parent_id?: string
   icon?: string
   color?: string
   is_active?: boolean
+  description?: string
 }
 
 export interface CategoryListResponse {
-  categories: Category[]
+  items: Category[]
   total: number
 }
 
+// Re-export types for backward compatibility
+export type { Category }
+
 class CategoriesService {
   /**
-   * Lấy danh sách tất cả categories
+   * Lấy danh sách categories (flat list)
    */
   async getCategories(): Promise<CategoryListResponse> {
-    const response = await baseApiClient.get<{ categories: Category[], count: number }>('/categories')
-    return {
-      categories: Array.isArray(response?.categories) ? response.categories : [],
-      total: response?.count ?? (Array.isArray(response?.categories) ? response.categories.length : 0),
-    }
+    return baseApiClient.get<CategoryListResponse>('/categories')
+  }
+
+  /**
+   * Lấy categories dạng tree (hierarchical)
+   */
+  async getCategoriesTree(): Promise<Category[]> {
+    return baseApiClient.get<Category[]>('/categories/tree')
   }
 
   /**
@@ -75,69 +71,37 @@ class CategoriesService {
   }
 
   /**
-   * Xóa category
+   * Xóa category (soft delete)
    */
   async deleteCategory(id: string): Promise<void> {
     await baseApiClient.delete<void>(`/categories/${id}`)
   }
 
   /**
-   * Lấy categories theo type
+   * Lấy categories theo type (income/expense)
    */
-  async getCategoriesByType(type: 'income' | 'expense' | 'transfer'): Promise<Category[]> {
-    const { categories } = await this.getCategories()
-    return categories.filter(c => c.type === type && c.is_active)
+  async getCategoriesByType(type: CategoryType): Promise<Category[]> {
+    const response = await this.getCategories()
+    return response.items.filter(cat => cat.type === type)
   }
 
   /**
-   * Lấy income categories
+   * Lấy system categories (built-in)
    */
-  async getIncomeCategories(): Promise<Category[]> {
-    return this.getCategoriesByType('income')
+  async getSystemCategories(): Promise<Category[]> {
+    const response = await this.getCategories()
+    return response.items.filter(cat => cat.is_system)
   }
 
   /**
-   * Lấy expense categories
+   * Lấy user custom categories
    */
-  async getExpenseCategories(): Promise<Category[]> {
-    return this.getCategoriesByType('expense')
-  }
-
-  /**
-   * Lấy parent categories (không có parent_id)
-   */
-  async getParentCategories(): Promise<Category[]> {
-    const { categories } = await this.getCategories()
-    return categories.filter(c => !c.parent_id && c.is_active)
-  }
-
-  /**
-   * Lấy subcategories của một parent
-   */
-  async getSubcategories(parentId: string): Promise<Category[]> {
-    const { categories } = await this.getCategories()
-    return categories.filter(c => c.parent_id === parentId && c.is_active)
-  }
-
-  /**
-   * Build category tree structure
-   */
-  async getCategoryTree(): Promise<(Category & { children: Category[] })[]> {
-    const { categories } = await this.getCategories()
-    const activeCategories = categories.filter(c => c.is_active)
-    
-    // Get parent categories
-    const parents = activeCategories.filter(c => !c.parent_id)
-    
-    // Map children to parents
-    return parents.map(parent => ({
-      ...parent,
-      children: activeCategories.filter(c => c.parent_id === parent.id),
-    }))
+  async getUserCategories(): Promise<Category[]> {
+    const response = await this.getCategories()
+    return response.items.filter(cat => !cat.is_system)
   }
 }
 
 // Export singleton instance
 export const categoriesService = new CategoriesService()
 export default categoriesService
-

@@ -1,12 +1,13 @@
 "use client"
 
+import Link from "next/link"
 import { useEffect, useState, useCallback } from "react"
 import { useAppDispatch, useAppSelector } from "@/lib/hooks"
 import { fetchAccounts } from "@/features/accounts/accountsSlice"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Edit, Trash2, Wallet, TrendingUp, DollarSign } from "lucide-react"
+import { Plus, Edit, Trash2, Wallet, TrendingUp, DollarSign, Eye, Link2 } from "lucide-react"
 import { CreateAccountModal } from "@/features/accounts/create-account-modal"
 import { EditAccountModal } from "@/features/accounts/edit-account-modal"
 import { DeleteAccountModal } from "@/features/accounts/delete-account-modal"
@@ -56,10 +57,10 @@ export default function AccountsPage() {
 
   const calculateTotalBalance = () => {
     return accounts
-      .filter(acc => acc.include_in_net_worth)
+      .filter(acc => acc.includeInNetWorth)
       .reduce((sum, acc) => {
         // Convert all to VND for simplicity (in real app, use exchange rates)
-        return sum + acc.current_balance
+        return sum + acc.currentBalance
       }, 0)
   }
 
@@ -103,10 +104,18 @@ export default function AccountsPage() {
           <h1 className="text-3xl font-bold tracking-tight">{t("page.title")}</h1>
           <p className="text-muted-foreground">{t("page.subtitle")}</p>
         </div>
-        <Button onClick={() => setIsCreateModalOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          {t("page.addAction")}
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" asChild>
+            <Link href="/brokers" className="flex items-center">
+              <Link2 className="mr-2 h-4 w-4" />
+              Manage Brokers
+            </Link>
+          </Button>
+          <Button onClick={() => setIsCreateModalOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            {t("page.addAction")}
+          </Button>
+        </div>
       </div>
 
       {/* Summary Cards */}
@@ -121,7 +130,7 @@ export default function AccountsPage() {
               <div className="text-2xl font-bold">{formatCurrency(calculateTotalBalance())}</div>
               <p className="text-xs text-muted-foreground">
                 {t("summary.totalAssets.subtitle", {
-                  values: { count: accounts.filter((a) => a.include_in_net_worth).length },
+                  values: { count: accounts.filter((a) => a.includeInNetWorth).length },
                 })}
               </p>
             </CardContent>
@@ -135,7 +144,7 @@ export default function AccountsPage() {
               <div className="text-2xl font-bold">{accounts.length}</div>
               <p className="text-xs text-muted-foreground">
                 {t("summary.accountCount.subtitle", {
-                  values: { primaryCount: accounts.filter((a) => a.is_primary).length },
+                  values: { primaryCount: accounts.filter((a) => a.isPrimary).length },
                 })}
               </p>
             </CardContent>
@@ -147,7 +156,7 @@ export default function AccountsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {new Set(accounts.map(a => a.account_type)).size}
+                {new Set(accounts.map(a => a.accountType)).size}
               </div>
               <p className="text-xs text-muted-foreground">
                 {t("summary.accountTypes.subtitle")}
@@ -163,14 +172,14 @@ export default function AccountsPage() {
           <Card key={account.id} className="hover:shadow-lg transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <div className="flex-1">
-                <CardTitle className="text-base font-semibold">{account.account_name}</CardTitle>
-                {account.institution_name && (
+                <CardTitle className="text-base font-semibold">{account.accountName}</CardTitle>
+                {account.institutionName && (
                   <CardDescription className="text-xs mt-1">
-                    {account.institution_name}
+                    {account.institutionName}
                   </CardDescription>
                 )}
               </div>
-              {account.is_primary && (
+              {account.isPrimary && (
                 <Badge variant="default" className="ml-2">{t("list.primary")}</Badge>
               )}
             </CardHeader>
@@ -178,40 +187,40 @@ export default function AccountsPage() {
               <div className="space-y-3">
                 <div>
                   <div className="text-2xl font-bold">
-                    {formatCurrency(account.current_balance, account.currency)}
+                    {formatCurrency(account.currentBalance, account.currency)}
                   </div>
-                  {account.available_balance !== undefined && 
-                   account.available_balance !== account.current_balance && (
-                    <div className="text-xs text-muted-foreground">
-                      {t("list.available")}: {formatCurrency(account.available_balance, account.currency)}
-                    </div>
-                  )}
+                  {account.availableBalance !== undefined &&
+                    account.availableBalance !== account.currentBalance && (
+                      <div className="text-xs text-muted-foreground">
+                        {t("list.available")}: {formatCurrency(account.availableBalance, account.currency)}
+                      </div>
+                    )}
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <Badge className={getAccountTypeColor(account.account_type)} variant="secondary">
-                    {getAccountTypeLabel(account.account_type)}
+                  <Badge className={getAccountTypeColor(account.accountType)} variant="secondary">
+                    {getAccountTypeLabel(account.accountType)}
                   </Badge>
-                  {!account.include_in_net_worth && (
+                  {!account.includeInNetWorth && (
                     <Badge variant="outline" className="text-xs">
                       {t("list.excluded")}
                     </Badge>
                   )}
                 </div>
 
-                {account.account_number_masked && (
+                {account.accountNumberMasked && (
                   <div className="text-xs text-muted-foreground">
-                    {account.account_number_masked}
+                    {account.accountNumberMasked}
                   </div>
                 )}
 
                 <div className="text-xs text-muted-foreground">
-                  {t("list.updatedAt")}: {new Date(account.updated_at).toLocaleDateString(numberLocale)}
+                  {t("list.updatedAt")}: {new Date(account.updatedAt).toLocaleDateString(numberLocale)}
                 </div>
 
                 <div className="flex space-x-2 pt-2">
-                  <Button 
-                    size="sm" 
+                  <Button
+                    size="sm"
                     variant="outline"
                     onClick={() => handleEdit(account)}
                     className="flex-1"
@@ -219,13 +228,19 @@ export default function AccountsPage() {
                     <Edit className="h-4 w-4 mr-1" />
                     {t("list.edit")}
                   </Button>
-                  <Button 
-                    size="sm" 
-                    variant="outline" 
+                  <Button
+                    size="sm"
+                    variant="outline"
                     className="text-red-600 hover:text-red-700"
                     onClick={() => handleDelete(account)}
                   >
                     <Trash2 className="h-4 w-4" />
+                  </Button>
+                  <Button size="sm" variant="secondary" asChild className="flex-1">
+                    <Link href={`/accounts/${account.id}`} className="flex items-center justify-center gap-1">
+                      <Eye className="h-4 w-4" />
+                      {t("list.view")}
+                    </Link>
                   </Button>
                 </div>
               </div>

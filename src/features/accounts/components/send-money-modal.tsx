@@ -49,8 +49,8 @@ export function SendMoneyModal({ isOpen, onClose, onSendMoney, accounts }) {
                 </SelectTrigger>
                 <SelectContent>
                   {accounts.map((account) => (
-                    <SelectItem key={account.id || account.name} value={account.account_name || account.name}>
-                      {account.account_name || account.name} (${(account.current_balance || account.balance || 0).toFixed(2)})
+                    <SelectItem key={account.id || account.name} value={account.accountName || account.name}>
+                      {account.accountName || account.name} (${(account.currentBalance || account.balance || 0).toFixed(2)})
                     </SelectItem>
                   ))}
                 </SelectContent>

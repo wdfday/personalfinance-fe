@@ -99,8 +99,8 @@ export default function GoalsPage() {
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {goals.map((goal) => {
-          const progressPercentage = getProgressPercentage(goal.current_amount, goal.target_amount)
-          const daysRemaining = getDaysRemaining(goal.target_date)
+          const progressPercentage = getProgressPercentage(goal.currentAmount, goal.targetAmount)
+          const daysRemaining = goal.targetDate ? getDaysRemaining(goal.targetDate) : 0
           const isOverdue = daysRemaining < 0 && goal.status === 'active'
 
           return (
@@ -122,12 +122,12 @@ export default function GoalsPage() {
               <CardContent>
                 <div className="space-y-4">
                   <p className="text-sm text-muted-foreground">{goal.description}</p>
-                  
+
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Progress</span>
                       <span className="font-medium">
-                        {formatCurrency(goal.current_amount, goal.currency)} / {formatCurrency(goal.target_amount, goal.currency)}
+                        {formatCurrency(goal.currentAmount, goal.currency)} / {formatCurrency(goal.targetAmount, goal.currency)}
                       </span>
                     </div>
                     <Progress value={progressPercentage} />
@@ -139,20 +139,24 @@ export default function GoalsPage() {
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Category</span>
-                      <span className="capitalize">{goal.category}</span>
+                      <span className="capitalize">{goal.type}</span>
                     </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Target Date</span>
-                      <span className={isOverdue ? "text-red-600 font-medium" : ""}>
-                        {new Date(goal.target_date).toLocaleDateString()}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Days Remaining</span>
-                      <span className={isOverdue ? "text-red-600 font-medium" : ""}>
-                        {isOverdue ? `${Math.abs(daysRemaining)} days overdue` : `${daysRemaining} days`}
-                      </span>
-                    </div>
+                    {goal.targetDate && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Target Date</span>
+                        <span className={isOverdue ? "text-red-600 font-medium" : ""}>
+                          {new Date(goal.targetDate).toLocaleDateString()}
+                        </span>
+                      </div>
+                    )}
+                    {goal.targetDate && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Days Remaining</span>
+                        <span className={isOverdue ? "text-red-600 font-medium" : ""}>
+                          {isOverdue ? `${Math.abs(daysRemaining)} days overdue` : `${daysRemaining} days`}
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex space-x-2 pt-2">

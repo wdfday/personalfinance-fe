@@ -1,17 +1,18 @@
 /**
  * Transactions Slice
- * Quản lý state cho Transactions module
+ * Quản lý state cho Transactions module - Direction-based model
  */
 
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit'
 import { transactionsService } from '@/services/api'
-import type { 
-  Transaction, 
-  CreateTransactionRequest, 
+import type {
+  Transaction,
+  CreateTransactionRequest,
   UpdateTransactionRequest,
+  TransactionQueryFilters,
   TransactionListResponse,
-  TransactionQueryParams
-} from '@/services/api'
+  TransactionSummary,
+} from '@/types/api'
 import { getErrorMessage } from '@/services/api/utils'
 
 interface TransactionsState {
@@ -21,18 +22,12 @@ interface TransactionsState {
   error: string | null
   pagination: {
     page: number
-    page_size: number
-    total_pages: number
-    total_count: number
+    pageSize: number
+    totalPages: number
+    totalCount: number
   }
-  summary?: {
-    total_income: number
-    total_expense: number
-    total_transfer: number
-    net_amount: number
-    count: number
-  }
-  filters: TransactionQueryParams
+  summary?: TransactionSummary
+  filters: TransactionQueryFilters
 }
 
 const initialState: TransactionsState = {
@@ -42,23 +37,35 @@ const initialState: TransactionsState = {
   error: null,
   pagination: {
     page: 1,
-    page_size: 20,
-    total_pages: 0,
-    total_count: 0,
+    pageSize: 20,
+    totalPages: 0,
+    totalCount: 0,
   },
   filters: {
     page: 1,
-    page_size: 20,
+    pageSize: 20,
   },
 }
 
 // Async thunks
 export const fetchTransactions = createAsyncThunk(
   'transactions/fetchTransactions',
-  async (params?: TransactionQueryParams, { rejectWithValue }) => {
+  async (params: TransactionQueryFilters | undefined, { rejectWithValue }) => {
     try {
       const response = await transactionsService.getTransactions(params)
       return response
+    } catch (error) {
+      return rejectWithValue(getErrorMessage(error))
+    }
+  }
+)
+
+export const fetchTransactionSummary = createAsyncThunk(
+  'transactions/fetchSummary',
+  async (params: TransactionQueryFilters | undefined, { rejectWithValue }) => {
+    try {
+      const summary = await transactionsService.getSummary(params)
+      return summary
     } catch (error) {
       return rejectWithValue(getErrorMessage(error))
     }
@@ -126,13 +133,13 @@ const transactionsSlice = createSlice({
     clearSelectedTransaction: (state) => {
       state.selectedTransaction = null
     },
-    setFilters: (state, action: PayloadAction<Partial<TransactionQueryParams>>) => {
+    setFilters: (state, action: PayloadAction<Partial<TransactionQueryFilters>>) => {
       state.filters = { ...state.filters, ...action.payload }
     },
     clearFilters: (state) => {
       state.filters = {
         page: 1,
-        page_size: 20,
+        pageSize: 20,
       }
     },
   },
@@ -145,14 +152,36 @@ const transactionsSlice = createSlice({
       })
       .addCase(fetchTransactions.fulfilled, (state, action) => {
         state.isLoading = false
-        state.transactions = action.payload.transactions
-        state.pagination = action.payload.pagination
-        state.summary = action.payload.summary
+        state.transactions = action.payload.transactions || []
+        state.pagination = action.payload.pagination || {
+          page: 1,
+          pageSize: 20,
+          totalPages: 0,
+          totalCount: 0,
+        }
+        // Use summary from response if available
+        if (action.payload.summary) {
+          state.summary = action.payload.summary
+        } else {
+          // Calculate summary from transactions using direction model
+          const transactions = action.payload.transactions || []
+          state.summary = {
+            totalDebit: transactions.filter(t => t.direction === 'DEBIT').reduce((sum, t) => sum + t.amount, 0),
+            totalCredit: transactions.filter(t => t.direction === 'CREDIT').reduce((sum, t) => sum + t.amount, 0),
+            netAmount: transactions.filter(t => t.direction === 'CREDIT').reduce((sum, t) => sum + t.amount, 0) -
+              transactions.filter(t => t.direction === 'DEBIT').reduce((sum, t) => sum + t.amount, 0),
+            count: transactions.length,
+          }
+        }
         state.error = null
       })
       .addCase(fetchTransactions.rejected, (state, action) => {
         state.isLoading = false
         state.error = action.payload as string
+      })
+      // Fetch Summary
+      .addCase(fetchTransactionSummary.fulfilled, (state, action) => {
+        state.summary = action.payload
       })
       // Fetch Transaction
       .addCase(fetchTransaction.pending, (state) => {
@@ -176,7 +205,7 @@ const transactionsSlice = createSlice({
       .addCase(createTransaction.fulfilled, (state, action) => {
         state.isLoading = false
         state.transactions.unshift(action.payload)
-        state.pagination.total_count += 1
+        state.pagination.totalCount += 1
         state.error = null
       })
       .addCase(createTransaction.rejected, (state, action) => {
@@ -211,7 +240,7 @@ const transactionsSlice = createSlice({
       .addCase(deleteTransaction.fulfilled, (state, action) => {
         state.isLoading = false
         state.transactions = state.transactions.filter(transaction => transaction.id !== action.payload)
-        state.pagination.total_count -= 1
+        state.pagination.totalCount -= 1
         if (state.selectedTransaction?.id === action.payload) {
           state.selectedTransaction = null
         }
@@ -224,11 +253,11 @@ const transactionsSlice = createSlice({
   },
 })
 
-export const { 
-  clearError, 
-  setSelectedTransaction, 
-  clearSelectedTransaction, 
-  setFilters, 
-  clearFilters 
+export const {
+  clearError,
+  setSelectedTransaction,
+  clearSelectedTransaction,
+  setFilters,
+  clearFilters
 } = transactionsSlice.actions
 export default transactionsSlice

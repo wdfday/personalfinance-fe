@@ -25,19 +25,18 @@ export function RecentTransactions() {
             <div key={transaction.id} className="flex items-center">
               <div className="flex-1">
                 <p className="text-sm font-medium">{transaction.description}</p>
-                <p className="text-xs text-muted-foreground">{new Date(transaction.date).toLocaleDateString()}</p>
+                <p className="text-xs text-muted-foreground">{new Date(transaction.bookingDate).toLocaleDateString()}</p>
               </div>
               <div className="flex items-center">
                 <span
-                  className={`text-sm font-medium ${
-                    transaction.type === "income"
+                  className={`text-sm font-medium ${transaction.direction === "CREDIT"
                       ? "text-green-600 dark:text-green-400"
                       : "text-red-600 dark:text-red-400"
-                  }`}
+                    }`}
                 >
-                  {transaction.type === "income" ? "+" : "-"}{formatCurrency(Math.abs(transaction.amount), transaction.currency)}
+                  {transaction.direction === "CREDIT" ? "+" : "-"}{formatCurrency(Math.abs(transaction.amount), transaction.currency)}
                 </span>
-                {transaction.type === "income" ? (
+                {transaction.direction === "CREDIT" ? (
                   <ArrowUpRight className="h-4 w-4 text-green-600 dark:text-green-400 ml-1" />
                 ) : (
                   <ArrowDownRight className="h-4 w-4 text-red-600 dark:text-red-400 ml-1" />

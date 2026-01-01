@@ -15,23 +15,26 @@ export function AccountsOverview() {
   const [isSendMoneyModalOpen, setIsSendMoneyModalOpen] = useState(false)
   const [isRequestMoneyModalOpen, setIsRequestMoneyModalOpen] = useState(false)
 
-  const totalBalance = accounts.reduce((sum, account) => sum + (account.current_balance || 0), 0)
-
-  const formatCurrency = (amount: number, currency: string = 'USD') => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: currency,
-    }).format(amount)
-  }
-
-  const handleAddMoney = (amount) => {
+  const handleAddMoney = (amount: number) => {
     // This would typically dispatch an action to update the account balance
     console.log(`Adding $${amount} to account`)
   }
 
-  const handleSendMoney = (amount, fromAccount) => {
+  const handleSendMoney = (amount: number, fromAccount: string) => {
     // This would typically dispatch an action to transfer money
     console.log(`Sending $${amount} from ${fromAccount}`)
+  }
+
+  // Calculate total net worth
+  const netWorth = accounts
+    .filter((a) => a.includeInNetWorth)
+    .reduce((sum, account) => sum + account.currentBalance, 0)
+
+  const formatCurrency = (amount: number, currency: string = "VND") => {
+    return new Intl.NumberFormat("vi-VN", {
+      style: "currency",
+      currency: currency,
+    }).format(amount)
   }
 
   const handleRequestMoney = (amount, contact) => {
@@ -40,20 +43,26 @@ export function AccountsOverview() {
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium">Accounts Overview</CardTitle>
-        <Wallet className="h-4 w-4 text-muted-foreground" />
+      <CardHeader>
+        <CardTitle>Accounts Overview</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="text-2xl font-bold">{formatCurrency(totalBalance)}</div>
-        <p className="text-xs text-muted-foreground">Total balance across all accounts</p>
-        <div className="mt-4 space-y-2">
-          {accounts.map((account) => (
-            <div key={account.id} className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">{account.account_name}</span>
-              <span className="text-sm font-medium">{formatCurrency(account.current_balance, account.currency)}</span>
-            </div>
-          ))}
+        <div className="space-y-4">
+          <div>
+            <p className="text-sm font-medium text-muted-foreground">Net Worth</p>
+            <h2 className="text-3xl font-bold">{formatCurrency(netWorth)}</h2>
+          </div>
+          <div className="space-y-2">
+            {accounts.map((account) => (
+              <div key={account.id} className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <div className={`w-2 h-2 rounded-full ${account.isActive ? "bg-green-500" : "bg-gray-300"}`} />
+                  <span className="font-medium">{account.accountName}</span>
+                </div>
+                <span>{formatCurrency(account.currentBalance, account.currency)}</span>
+              </div>
+            ))}
+          </div>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-2">
           <Button size="sm" onClick={() => setIsAddMoneyModalOpen(true)}>

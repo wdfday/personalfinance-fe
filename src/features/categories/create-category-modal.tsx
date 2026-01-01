@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, useRef } from "react"
 import { useAppDispatch, useAppSelector } from "@/lib/hooks"
 import { createCategory, fetchCategories } from "@/features/categories/categoriesSlice"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
@@ -16,7 +16,7 @@ import { useTranslation } from "@/contexts/i18n-context"
 
 type CreateCategoryForm = {
   name: string
-  type: "income" | "expense" | "transfer"
+  type: "income" | "expense" | "both"
   parent_id?: string | "none"
   icon: string
   color: string
@@ -24,7 +24,7 @@ type CreateCategoryForm = {
 
 const createCategorySchema = (t: (key: string, options?: any) => string) => z.object({
   name: z.string().min(2, t("validation.nameMin")).max(100, t("validation.nameMax")),
-  type: z.enum(["income", "expense", "transfer"], {
+  type: z.enum(["income", "expense", "both"], {
     required_error: t("validation.typeRequired"),
   }),
   parent_id: z.string().uuid().optional().or(z.literal("none")),
@@ -43,12 +43,14 @@ export function CreateCategoryModal({ isOpen, onClose }: CreateCategoryModalProp
   const [isSubmitting, setIsSubmitting] = useState(false)
   const { t } = useTranslation("categories")
   const { t: tCommonActions } = useTranslation("common.actions")
+  const hasFetchedRef = useRef(false)
 
   useEffect(() => {
-    if (isOpen && categories.length === 0) {
+    if (isOpen && categories.length === 0 && !hasFetchedRef.current) {
+      hasFetchedRef.current = true
       dispatch(fetchCategories())
     }
-  }, [isOpen, categories.length, dispatch])
+  }, [isOpen, dispatch])
 
   const {
     register,
@@ -129,7 +131,7 @@ export function CreateCategoryModal({ isOpen, onClose }: CreateCategoryModalProp
               <SelectContent>
                 <SelectItem value="income">{t("types.income")}</SelectItem>
                 <SelectItem value="expense">{t("types.expense")}</SelectItem>
-                <SelectItem value="transfer">{t("types.transfer")}</SelectItem>
+                <SelectItem value="both">{t("types.both")}</SelectItem>
               </SelectContent>
             </Select>
           </div>

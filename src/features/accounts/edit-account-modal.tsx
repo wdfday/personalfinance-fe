@@ -18,27 +18,23 @@ import { useTranslation } from "@/contexts/i18n-context"
 import type { InstitutionName } from "@/services/api/accounts.service"
 
 const updateAccountSchema = z.object({
-  account_name: z
+  accountName: z
     .string()
     .min(1, { message: "validation.accountNameRequired" })
     .max(255, { message: "validation.accountNameTooLong" }),
-  account_type: z.enum(["cash", "bank", "savings", "credit_card", "investment", "crypto_wallet"], {
+  accountType: z.enum(["cash", "bank", "savings", "credit_card", "investment", "crypto_wallet"], {
     required_error: "validation.accountTypeRequired",
   }),
-  institution_name: z.string().optional(),
-  current_balance: z.number().min(0, { message: "validation.balanceMin" }),
+  institutionName: z.string().optional(),
+  currentBalance: z.number().min(0, { message: "validation.balanceMin" }),
   currency: z.string().length(3, { message: "validation.currencyLength" }).default("VND"),
-  account_number_masked: z
+  accountNumberMasked: z
     .string()
     .max(50, { message: "validation.accountNumberTooLong" })
     .optional(),
-  is_primary: z.boolean().default(false),
-  include_in_net_worth: z.boolean().default(true),
-  // API credentials
-  api_key: z.string().optional(),
-  api_secret: z.string().optional(),
-  consumer_id: z.string().optional(),
-  consumer_key: z.string().optional(),
+  isActive: z.boolean().default(true),
+  isPrimary: z.boolean().default(false),
+  includeInNetWorth: z.boolean().default(true),
 })
 
 type UpdateAccountForm = z.infer<typeof updateAccountSchema>
@@ -68,29 +64,23 @@ export function EditAccountModal({ isOpen, onClose, account }: EditAccountModalP
 
   useEffect(() => {
     if (account) {
-      setValue("account_name", account.account_name)
-      setValue("account_type", account.account_type)
-      setValue("institution_name", account.institution_name || "")
-      setValue("current_balance", account.current_balance)
+      setValue("accountName", account.accountName)
+      setValue("accountType", account.accountType)
+      setValue("institutionName", account.institutionName || "")
+      setValue("currentBalance", account.currentBalance)
       setValue("currency", account.currency)
-      setValue("account_number_masked", account.account_number_masked || "")
-      setValue("is_primary", account.is_primary)
-      setValue("include_in_net_worth", account.include_in_net_worth)
-      setValue("api_key", account.api_key || "")
-      setValue("api_secret", account.api_secret || "")
-      setValue("consumer_id", account.consumer_id || "")
-      setValue("consumer_key", account.consumer_key || "")
+      setValue("accountNumberMasked", account.accountNumberMasked || "")
+      setValue("isActive", account.isActive)
+      setValue("isPrimary", account.isPrimary)
+      setValue("includeInNetWorth", account.includeInNetWorth)
     }
   }, [account, setValue])
 
-  const selectedType = watch("account_type")
-  const institutionName = watch("institution_name")
-  const isPrimary = watch("is_primary")
-  const includeInNetWorth = watch("include_in_net_worth")
-
-  // Determine which API fields to show
-  const needsConsumerCredentials = selectedType === "investment" && (institutionName === "SSI" || institutionName === "CONSUMERID")
-  const needsCryptoCredentials = selectedType === "crypto_wallet"
+  const selectedType = watch("accountType")
+  const institutionName = watch("institutionName")
+  const isActive = watch("isActive")
+  const isPrimary = watch("isPrimary")
+  const includeInNetWorth = watch("includeInNetWorth")
 
   // Institution options by account type
   const getInstitutionOptions = () => {
@@ -180,22 +170,22 @@ export function EditAccountModal({ isOpen, onClose, account }: EditAccountModalP
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="account_name">{t("form.labels.accountName")} *</Label>
+            <Label htmlFor="accountName">{t("form.labels.accountName")} *</Label>
             <Input
-              id="account_name"
-              {...register("account_name")}
+              id="accountName"
+              {...register("accountName")}
               placeholder={t("form.placeholders.accountName")}
             />
-            {errors.account_name && (
-              <p className="text-sm text-red-500">{t(errors.account_name.message || "validation.accountNameRequired")}</p>
+            {errors.accountName && (
+              <p className="text-sm text-red-500">{t(errors.accountName.message || "validation.accountNameRequired")}</p>
             )}
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="account_type">{t("form.labels.accountType")} *</Label>
+            <Label htmlFor="accountType">{t("form.labels.accountType")} *</Label>
             <Select
               value={selectedType}
-              onValueChange={(value) => setValue("account_type", value as UpdateAccountForm['account_type'])}
+              onValueChange={(value) => setValue("accountType", value as UpdateAccountForm['accountType'])}
             >
               <SelectTrigger>
                 <SelectValue placeholder={t("form.labels.accountType")} />
@@ -209,19 +199,19 @@ export function EditAccountModal({ isOpen, onClose, account }: EditAccountModalP
                 <SelectItem value="crypto_wallet">{t("accountTypes.crypto_wallet")}</SelectItem>
               </SelectContent>
             </Select>
-            {errors.account_type && (
-              <p className="text-sm text-red-500">{t(errors.account_type.message || "validation.accountTypeRequired")}</p>
+            {errors.accountType && (
+              <p className="text-sm text-red-500">{t(errors.accountType.message || "validation.accountTypeRequired")}</p>
             )}
           </div>
 
           {getInstitutionOptions().length > 0 && (
             <div className="space-y-2">
-              <Label htmlFor="institution_name">{t("form.labels.institutionName")}</Label>
+              <Label htmlFor="institutionName">{t("form.labels.institutionName")}</Label>
               <Select
                 value={institutionName || ""}
-                onValueChange={(value) => setValue("institution_name", value as InstitutionName)}
+                onValueChange={(value) => setValue("institutionName", value as InstitutionName)}
               >
-                <SelectTrigger id="institution_name">
+                <SelectTrigger id="institutionName">
                   <SelectValue placeholder={t("form.placeholders.institutionName")} />
                 </SelectTrigger>
                 <SelectContent>
@@ -235,82 +225,18 @@ export function EditAccountModal({ isOpen, onClose, account }: EditAccountModalP
             </div>
           )}
 
-          {/* API Credentials for Investment (SSI, ConsumerID) */}
-          {needsConsumerCredentials && (
-            <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
-              <div className="space-y-1">
-                <Label className="text-sm font-semibold">{t("apiCredentials.investment.title")}</Label>
-                <p className="text-xs text-muted-foreground">
-                  {t("apiCredentials.investment.description", {
-                    values: { institution: institutionName === "SSI" ? t("institutions.SSI") : t("institutions.CONSUMERID") },
-                  })}
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="consumer_id">{t("apiCredentials.investment.consumerId")} *</Label>
-                <Input
-                  id="consumer_id"
-                  type="text"
-                  {...register("consumer_id")}
-                  placeholder={t("apiCredentials.investment.consumerIdPlaceholder")}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="consumer_key">{t("apiCredentials.investment.consumerKey")} *</Label>
-                <Input
-                  id="consumer_key"
-                  type="password"
-                  {...register("consumer_key")}
-                  placeholder={t("apiCredentials.investment.consumerKeyPlaceholder")}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* API Credentials for Crypto */}
-          {needsCryptoCredentials && (
-            <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
-              <div className="space-y-1">
-                <Label className="text-sm font-semibold">{t("apiCredentials.crypto.title")}</Label>
-                <p className="text-xs text-muted-foreground">
-                  {t("apiCredentials.crypto.description", {
-                    values: { institution: institutionName ? t(`institutions.${institutionName}`) : t("institutions.OTHER") },
-                  })}
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="api_key">{t("apiCredentials.crypto.apiKey")} *</Label>
-                <Input
-                  id="api_key"
-                  type="text"
-                  {...register("api_key")}
-                  placeholder={t("apiCredentials.crypto.apiKeyPlaceholder")}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="api_secret">{t("apiCredentials.crypto.apiSecret")} *</Label>
-                <Input
-                  id="api_secret"
-                  type="password"
-                  {...register("api_secret")}
-                  placeholder={t("apiCredentials.crypto.apiSecretPlaceholder")}
-                />
-              </div>
-            </div>
-          )}
-
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="current_balance">{t("form.labels.currentBalance")} *</Label>
+              <Label htmlFor="currentBalance">{t("form.labels.currentBalance")} *</Label>
               <Input
-                id="current_balance"
+                id="currentBalance"
                 type="number"
                 step="0.01"
-                {...register("current_balance", { valueAsNumber: true })}
+                {...register("currentBalance", { valueAsNumber: true })}
                 placeholder="0"
               />
-              {errors.current_balance && (
-                <p className="text-sm text-red-500">{t(errors.current_balance.message || "validation.balanceMin")}</p>
+              {errors.currentBalance && (
+                <p className="text-sm text-red-500">{t(errors.currentBalance.message || "validation.balanceMin")}</p>
               )}
             </div>
 
@@ -334,10 +260,10 @@ export function EditAccountModal({ isOpen, onClose, account }: EditAccountModalP
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="account_number_masked">{t("form.labels.accountNumberMasked")}</Label>
+            <Label htmlFor="accountNumberMasked">{t("form.labels.accountNumberMasked")}</Label>
             <Input
-              id="account_number_masked"
-              {...register("account_number_masked")}
+              id="accountNumberMasked"
+              {...register("accountNumberMasked")}
               placeholder={t("form.placeholders.accountNumberMasked")}
             />
           </div>
@@ -345,25 +271,37 @@ export function EditAccountModal({ isOpen, onClose, account }: EditAccountModalP
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label htmlFor="is_primary">{t("form.labels.isPrimary")}</Label>
-                <p className="text-sm text-muted-foreground">{t("form.helpers.isPrimary")}</p>
+                <Label htmlFor="isActive">{t("form.labels.isActive")}</Label>
+                <p className="text-sm text-muted-foreground">{t("form.helpers.isActive")}</p>
               </div>
               <Switch
-                id="is_primary"
-                checked={isPrimary}
-                onCheckedChange={(checked) => setValue("is_primary", checked)}
+                id="isActive"
+                checked={isActive}
+                onCheckedChange={(checked) => setValue("isActive", checked)}
               />
             </div>
 
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label htmlFor="include_in_net_worth">{t("form.labels.includeInNetWorth")}</Label>
+                <Label htmlFor="isPrimary">{t("form.labels.isPrimary")}</Label>
+                <p className="text-sm text-muted-foreground">{t("form.helpers.isPrimary")}</p>
+              </div>
+              <Switch
+                id="isPrimary"
+                checked={isPrimary}
+                onCheckedChange={(checked) => setValue("isPrimary", checked)}
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="includeInNetWorth">{t("form.labels.includeInNetWorth")}</Label>
                 <p className="text-sm text-muted-foreground">{t("form.helpers.includeInNetWorth")}</p>
               </div>
               <Switch
-                id="include_in_net_worth"
+                id="includeInNetWorth"
                 checked={includeInNetWorth}
-                onCheckedChange={(checked) => setValue("include_in_net_worth", checked)}
+                onCheckedChange={(checked) => setValue("includeInNetWorth", checked)}
               />
             </div>
           </div>
@@ -381,4 +319,3 @@ export function EditAccountModal({ isOpen, onClose, account }: EditAccountModalP
     </Dialog>
   )
 }
-

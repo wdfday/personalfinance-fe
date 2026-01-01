@@ -14,32 +14,26 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
 import { toast } from "sonner"
 import { useTranslation } from "@/contexts/i18n-context"
-import type { InstitutionName, DebitCreditInstitution, InvestmentInstitution, CryptoInstitution } from "@/services/api/accounts.service"
+import type { InstitutionName } from "@/services/api/accounts.service"
 
 const createAccountSchema = z.object({
-  account_name: z
+  accountName: z
     .string()
     .min(1, { message: "validation.accountNameRequired" })
     .max(255, { message: "validation.accountNameTooLong" }),
-  account_type: z.enum(["cash", "bank", "savings", "credit_card", "investment", "crypto_wallet"], {
+  accountType: z.enum(["cash", "bank", "savings", "credit_card", "investment", "crypto_wallet"], {
     required_error: "validation.accountTypeRequired",
   }),
-  institution_name: z.string().optional(),
-  current_balance: z.number().min(0, { message: "validation.balanceMin" }),
-  available_balance: z.number().optional(),
+  institutionName: z.string().optional(),
+  currentBalance: z.number().min(0, { message: "validation.balanceMin" }).optional(),
   currency: z.string().length(3, { message: "validation.currencyLength" }).default("VND"),
-  account_number_masked: z
+  accountNumberMasked: z
     .string()
     .max(50, { message: "validation.accountNumberTooLong" })
     .optional(),
-  is_active: z.boolean().default(true),
-  is_primary: z.boolean().default(false),
-  include_in_net_worth: z.boolean().default(true),
-  // API credentials
-  api_key: z.string().optional(),
-  api_secret: z.string().optional(),
-  consumer_id: z.string().optional(),
-  consumer_key: z.string().optional(),
+  isActive: z.boolean().default(true),
+  isPrimary: z.boolean().default(false),
+  includeInNetWorth: z.boolean().default(true),
 })
 
 type CreateAccountForm = z.infer<typeof createAccountSchema>
@@ -65,26 +59,22 @@ export function CreateAccountModal({ isOpen, onClose }: CreateAccountModalProps)
   } = useForm<CreateAccountForm>({
     resolver: zodResolver(createAccountSchema),
     defaultValues: {
-      account_name: "",
-      account_type: "cash",
-      institution_name: "",
-      current_balance: 0,
+      accountName: "",
+      accountType: "cash",
+      institutionName: "",
+      currentBalance: 0,
       currency: "VND",
-      is_active: true,
-      is_primary: false,
-      include_in_net_worth: true,
+      isActive: true,
+      isPrimary: false,
+      includeInNetWorth: true,
     },
   })
 
-  const selectedType = watch("account_type")
-  const institutionName = watch("institution_name")
-  const isActive = watch("is_active")
-  const isPrimary = watch("is_primary")
-  const includeInNetWorth = watch("include_in_net_worth")
-
-  // Determine which API fields to show
-  const needsConsumerCredentials = selectedType === "investment" && (institutionName === "SSI" || institutionName === "CONSUMERID")
-  const needsCryptoCredentials = selectedType === "crypto_wallet"
+  const selectedType = watch("accountType")
+  const institutionName = watch("institutionName")
+  const isActive = watch("isActive")
+  const isPrimary = watch("isPrimary")
+  const includeInNetWorth = watch("includeInNetWorth")
 
   // Institution options by account type
   const getInstitutionOptions = () => {
@@ -141,7 +131,20 @@ export function CreateAccountModal({ isOpen, onClose }: CreateAccountModalProps)
   const onSubmit = async (data: CreateAccountForm) => {
     try {
       setIsSubmitting(true)
-      await dispatch(createAccount(data)).unwrap()
+
+      // Ensure isPrimary is false for non-cash/bank accounts
+      const submitData = {
+        ...data,
+        isPrimary: (data.accountType === "cash" || data.accountType === "bank") ? data.isPrimary : false,
+        // Remove institutionName for cash accounts
+        institutionName: data.accountType === "cash" ? undefined : data.institutionName,
+        // Remove accountNumberMasked for cash, investment, and crypto accounts if not relevant
+        accountNumberMasked: (data.accountType === "bank" || data.accountType === "savings" || data.accountType === "credit_card")
+          ? data.accountNumberMasked
+          : undefined,
+      }
+
+      await dispatch(createAccount(submitData)).unwrap()
       toast.success(t("modals.create.success"))
       reset()
       onClose()
@@ -161,336 +164,6 @@ export function CreateAccountModal({ isOpen, onClose }: CreateAccountModalProps)
     onClose()
   }
 
-  // Render investment-specific form
-  if (selectedType === "investment") {
-    return (
-      <Dialog open={isOpen} onOpenChange={handleClose}>
-        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{t("modals.create.investment.title", { defaultValue: "Tạo tài khoản Đầu tư" })}</DialogTitle>
-            <DialogDescription>
-              {t("modals.create.investment.description", { defaultValue: "Kết nối tài khoản đầu tư với API credentials" })}
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="account_type">{t("form.labels.accountType")} *</Label>
-              <Select
-                value="investment"
-                onValueChange={(value) => setValue("account_type", value as CreateAccountForm['account_type'])}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="investment">{t("accountTypes.investment")}</SelectItem>
-                  <SelectItem value="cash">{t("accountTypes.cash")}</SelectItem>
-                  <SelectItem value="bank">{t("accountTypes.bank")}</SelectItem>
-                  <SelectItem value="savings">{t("accountTypes.savings")}</SelectItem>
-                  <SelectItem value="credit_card">{t("accountTypes.credit_card")}</SelectItem>
-                  <SelectItem value="crypto_wallet">{t("accountTypes.crypto_wallet")}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <input type="hidden" {...register("currency")} value="VND" />
-            <input type="hidden" {...register("is_active")} value={true} />
-            <input type="hidden" {...register("include_in_net_worth")} value={true} />
-
-            <div className="space-y-2">
-              <Label htmlFor="account_name">{t("form.labels.accountName")} *</Label>
-              <Input
-                id="account_name"
-                {...register("account_name")}
-                placeholder={t("form.placeholders.accountName")}
-              />
-              {errors.account_name && (
-                <p className="text-sm text-red-500">{t(errors.account_name.message || "validation.accountNameRequired")}</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="institution_name">{t("form.labels.institutionName")} *</Label>
-              <Select
-                value={institutionName || ""}
-                onValueChange={(value) => {
-                  setValue("institution_name", value as InstitutionName)
-                  // Reset credentials when institution changes
-                  if (value !== "SSI" && value !== "CONSUMERID") {
-                    setValue("consumer_id", "")
-                    setValue("consumer_key", "")
-                  }
-                }}
-              >
-                <SelectTrigger id="institution_name">
-                  <SelectValue placeholder={t("form.placeholders.institutionName")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {getInstitutionOptions().map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* API Credentials for Investment (SSI, ConsumerID) */}
-            {(institutionName === "SSI" || institutionName === "CONSUMERID") && (
-              <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
-                <div className="space-y-1">
-                  <Label className="text-sm font-semibold">{t("apiCredentials.investment.title")}</Label>
-                  <p className="text-xs text-muted-foreground">
-                    {t("apiCredentials.investment.description", {
-                      values: { institution: institutionName === "SSI" ? t("institutions.SSI") : t("institutions.CONSUMERID") },
-                    })}
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="consumer_id">{t("apiCredentials.investment.consumerId")} *</Label>
-                  <Input
-                    id="consumer_id"
-                    type="text"
-                    {...register("consumer_id", { required: true })}
-                    placeholder={t("apiCredentials.investment.consumerIdPlaceholder")}
-                  />
-                  {errors.consumer_id && (
-                    <p className="text-sm text-red-500">{t("validation.consumerIdRequired", { defaultValue: "Consumer ID là bắt buộc" })}</p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="consumer_key">{t("apiCredentials.investment.consumerKey")} *</Label>
-                  <Input
-                    id="consumer_key"
-                    type="password"
-                    {...register("consumer_key", { required: true })}
-                    placeholder={t("apiCredentials.investment.consumerKeyPlaceholder")}
-                  />
-                  {errors.consumer_key && (
-                    <p className="text-sm text-red-500">{t("validation.consumerKeyRequired", { defaultValue: "Consumer Key là bắt buộc" })}</p>
-                  )}
-                </div>
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="current_balance">{t("form.labels.currentBalance")} *</Label>
-                <Input
-                  id="current_balance"
-                  type="number"
-                  step="0.01"
-                  {...register("current_balance", { valueAsNumber: true })}
-                  placeholder="0"
-                />
-                {errors.current_balance && (
-                  <p className="text-sm text-red-500">{t(errors.current_balance.message || "validation.balanceMin")}</p>
-                )}
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label htmlFor="is_primary">{t("form.labels.isPrimary")}</Label>
-                <p className="text-sm text-muted-foreground">{t("form.helpers.isPrimary")}</p>
-              </div>
-              <Switch
-                id="is_primary"
-                checked={isPrimary}
-                onCheckedChange={(checked) => setValue("is_primary", checked)}
-              />
-            </div>
-
-            <div className="flex justify-end space-x-2 pt-4">
-              <Button type="button" variant="outline" onClick={handleClose}>
-                {tCommonActions("cancel")}
-              </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? t("modals.create.submitting") : t("modals.create.submit")}
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
-    )
-  }
-
-  // Render crypto-specific form
-  if (selectedType === "crypto_wallet") {
-    return (
-      <Dialog open={isOpen} onOpenChange={handleClose}>
-        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{t("modals.create.crypto.title", { defaultValue: "Tạo tài khoản Crypto" })}</DialogTitle>
-            <DialogDescription>
-              {t("modals.create.crypto.description", { defaultValue: "Kết nối ví crypto với API credentials" })}
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="account_type">{t("form.labels.accountType")} *</Label>
-              <Select
-                value="crypto_wallet"
-                onValueChange={(value) => setValue("account_type", value as CreateAccountForm['account_type'])}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="crypto_wallet">{t("accountTypes.crypto_wallet")}</SelectItem>
-                  <SelectItem value="cash">{t("accountTypes.cash")}</SelectItem>
-                  <SelectItem value="bank">{t("accountTypes.bank")}</SelectItem>
-                  <SelectItem value="savings">{t("accountTypes.savings")}</SelectItem>
-                  <SelectItem value="credit_card">{t("accountTypes.credit_card")}</SelectItem>
-                  <SelectItem value="investment">{t("accountTypes.investment")}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <input type="hidden" {...register("currency")} value="USD" />
-            <input type="hidden" {...register("is_active")} value={true} />
-            <input type="hidden" {...register("include_in_net_worth")} value={true} />
-
-            <div className="space-y-2">
-              <Label htmlFor="account_name">{t("form.labels.accountName")} *</Label>
-              <Input
-                id="account_name"
-                {...register("account_name")}
-                placeholder={t("form.placeholders.accountName")}
-              />
-              {errors.account_name && (
-                <p className="text-sm text-red-500">{t(errors.account_name.message || "validation.accountNameRequired")}</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="institution_name">{t("form.labels.institutionName")} *</Label>
-              <Select
-                value={institutionName || ""}
-                onValueChange={(value) => {
-                  setValue("institution_name", value as InstitutionName)
-                  // Reset API keys when institution changes
-                  setValue("api_key", "")
-                  setValue("api_secret", "")
-                }}
-              >
-                <SelectTrigger id="institution_name">
-                  <SelectValue placeholder={t("form.placeholders.institutionName")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {getInstitutionOptions().map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* API Credentials for Crypto */}
-            {institutionName && (
-              <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
-                <div className="space-y-1">
-                  <Label className="text-sm font-semibold">{t("apiCredentials.crypto.title")}</Label>
-                  <p className="text-xs text-muted-foreground">
-                    {t("apiCredentials.crypto.description", {
-                      values: { institution: institutionName ? t(`institutions.${institutionName}`) : t("institutions.OTHER") },
-                    })}
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="api_key">{t("apiCredentials.crypto.apiKey")} *</Label>
-                  <Input
-                    id="api_key"
-                    type="text"
-                    {...register("api_key", { required: true })}
-                    placeholder={t("apiCredentials.crypto.apiKeyPlaceholder")}
-                  />
-                  {errors.api_key && (
-                    <p className="text-sm text-red-500">{t("validation.apiKeyRequired", { defaultValue: "API Key là bắt buộc" })}</p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="api_secret">{t("apiCredentials.crypto.apiSecret")} *</Label>
-                  <Input
-                    id="api_secret"
-                    type="password"
-                    {...register("api_secret", { required: true })}
-                    placeholder={t("apiCredentials.crypto.apiSecretPlaceholder")}
-                  />
-                  {errors.api_secret && (
-                    <p className="text-sm text-red-500">{t("validation.apiSecretRequired", { defaultValue: "API Secret là bắt buộc" })}</p>
-                  )}
-                </div>
-                <div className="text-xs text-muted-foreground bg-background p-2 rounded border">
-                  <p className="font-semibold mb-1">Lưu ý bảo mật:</p>
-                  <ul className="list-disc list-inside space-y-0.5">
-                    <li>API keys sẽ được mã hóa và lưu trữ an toàn</li>
-                    <li>Chỉ cấp quyền đọc (read-only) khi có thể</li>
-                    <li>Không chia sẻ API keys với người khác</li>
-                  </ul>
-                </div>
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="current_balance">{t("form.labels.currentBalance")} *</Label>
-                <Input
-                  id="current_balance"
-                  type="number"
-                  step="0.01"
-                  {...register("current_balance", { valueAsNumber: true })}
-                  placeholder="0"
-                />
-                {errors.current_balance && (
-                  <p className="text-sm text-red-500">{t(errors.current_balance.message || "validation.balanceMin")}</p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="currency">{t("form.labels.currency")}</Label>
-                <Select
-                  value={watch("currency")}
-                  onValueChange={(value) => setValue("currency", value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="USD">USD ($)</SelectItem>
-                    <SelectItem value="BTC">BTC</SelectItem>
-                    <SelectItem value="ETH">ETH</SelectItem>
-                    <SelectItem value="USDT">USDT</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label htmlFor="is_primary">{t("form.labels.isPrimary")}</Label>
-                <p className="text-sm text-muted-foreground">{t("form.helpers.isPrimary")}</p>
-              </div>
-              <Switch
-                id="is_primary"
-                checked={isPrimary}
-                onCheckedChange={(checked) => setValue("is_primary", checked)}
-              />
-            </div>
-
-            <div className="flex justify-end space-x-2 pt-4">
-              <Button type="button" variant="outline" onClick={handleClose}>
-                {tCommonActions("cancel")}
-              </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? t("modals.create.submitting") : t("modals.create.submit")}
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
-    )
-  }
-
-  // Default form for other account types
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
@@ -500,22 +173,39 @@ export function CreateAccountModal({ isOpen, onClose }: CreateAccountModalProps)
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="account_name">{t("form.labels.accountName")} *</Label>
+            <Label htmlFor="accountName">{t("form.labels.accountName")} *</Label>
             <Input
-              id="account_name"
-              {...register("account_name")}
+              id="accountName"
+              {...register("accountName")}
               placeholder={t("form.placeholders.accountName")}
             />
-            {errors.account_name && (
-              <p className="text-sm text-red-500">{t(errors.account_name.message || "validation.accountNameRequired")}</p>
+            {errors.accountName && (
+              <p className="text-sm text-red-500">{t(errors.accountName.message || "validation.accountNameRequired")}</p>
             )}
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="account_type">{t("form.labels.accountType")} *</Label>
+            <Label htmlFor="accountType">{t("form.labels.accountType")} *</Label>
             <Select
               value={selectedType}
-              onValueChange={(value) => setValue("account_type", value as CreateAccountForm['account_type'])}
+              onValueChange={(value) => {
+                const newType = value as CreateAccountForm['accountType']
+                setValue("accountType", newType)
+                // Reset isPrimary to false if not cash or bank
+                if (newType !== "cash" && newType !== "bank") {
+                  setValue("isPrimary", false)
+                }
+                // Reset institutionName and accountNumberMasked for cash
+                if (newType === "cash") {
+                  setValue("institutionName", "")
+                  setValue("accountNumberMasked", "")
+                } else {
+                  // Reset accountNumberMasked for non-bank accounts (investment, crypto)
+                  if (newType !== "bank" && newType !== "savings" && newType !== "credit_card") {
+                    setValue("accountNumberMasked", "")
+                  }
+                }
+              }}
             >
               <SelectTrigger>
                 <SelectValue placeholder={t("form.labels.accountType")} />
@@ -529,19 +219,25 @@ export function CreateAccountModal({ isOpen, onClose }: CreateAccountModalProps)
                 <SelectItem value="crypto_wallet">{t("accountTypes.crypto_wallet")}</SelectItem>
               </SelectContent>
             </Select>
-            {errors.account_type && (
-              <p className="text-sm text-red-500">{t(errors.account_type.message || "validation.accountTypeRequired")}</p>
+            {errors.accountType && (
+              <p className="text-sm text-red-500">{t(errors.accountType.message || "validation.accountTypeRequired")}</p>
             )}
           </div>
 
-          {getInstitutionOptions().length > 0 && (
+          {/* Institution name - not needed for cash */}
+          {selectedType !== "cash" && getInstitutionOptions().length > 0 && (
             <div className="space-y-2">
-              <Label htmlFor="institution_name">{t("form.labels.institutionName")}</Label>
+              <Label htmlFor="institutionName">
+                {t("form.labels.institutionName")}
+                {(selectedType === "investment" || selectedType === "crypto_wallet") && " *"}
+              </Label>
               <Select
                 value={institutionName || ""}
-                onValueChange={(value) => setValue("institution_name", value as InstitutionName)}
+                onValueChange={(value) => {
+                  setValue("institutionName", value as InstitutionName)
+                }}
               >
-                <SelectTrigger id="institution_name">
+                <SelectTrigger id="institutionName">
                   <SelectValue placeholder={t("form.placeholders.institutionName")} />
                 </SelectTrigger>
                 <SelectContent>
@@ -555,85 +251,20 @@ export function CreateAccountModal({ isOpen, onClose }: CreateAccountModalProps)
             </div>
           )}
 
-          {/* API Credentials for Investment (SSI, ConsumerID) */}
-          {needsConsumerCredentials && (
-            <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
-              <div className="space-y-1">
-                <Label className="text-sm font-semibold">{t("apiCredentials.investment.title")}</Label>
-                <p className="text-xs text-muted-foreground">
-                  {t("apiCredentials.investment.description", {
-                    values: { institution: institutionName === "SSI" ? t("institutions.SSI") : t("institutions.CONSUMERID") },
-                  })}
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="consumer_id">{t("apiCredentials.investment.consumerId")} *</Label>
-                <Input
-                  id="consumer_id"
-                  type="text"
-                  {...register("consumer_id")}
-                  placeholder={t("apiCredentials.investment.consumerIdPlaceholder")}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="consumer_key">{t("apiCredentials.investment.consumerKey")} *</Label>
-                <Input
-                  id="consumer_key"
-                  type="password"
-                  {...register("consumer_key")}
-                  placeholder={t("apiCredentials.investment.consumerKeyPlaceholder")}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* API Credentials for Crypto */}
-          {needsCryptoCredentials && (
-            <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
-              <div className="space-y-1">
-                <Label className="text-sm font-semibold">{t("apiCredentials.crypto.title")}</Label>
-                <p className="text-xs text-muted-foreground">
-                  {t("apiCredentials.crypto.description", {
-                    values: { institution: institutionName ? t(`institutions.${institutionName}`) : t("institutions.OTHER") },
-                  })}
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="api_key">{t("apiCredentials.crypto.apiKey")} *</Label>
-                <Input
-                  id="api_key"
-                  type="text"
-                  {...register("api_key")}
-                  placeholder={t("apiCredentials.crypto.apiKeyPlaceholder")}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="api_secret">{t("apiCredentials.crypto.apiSecret")} *</Label>
-                <Input
-                  id="api_secret"
-                  type="password"
-                  {...register("api_secret")}
-                  placeholder={t("apiCredentials.crypto.apiSecretPlaceholder")}
-                />
-              </div>
-            </div>
-          )}
-
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="current_balance">{t("form.labels.currentBalance")} *</Label>
+              <Label htmlFor="currentBalance">{t("form.labels.currentBalance")} *</Label>
               <Input
-                id="current_balance"
+                id="currentBalance"
                 type="number"
                 step="0.01"
-                {...register("current_balance", { valueAsNumber: true })}
+                {...register("currentBalance", { valueAsNumber: true })}
                 placeholder="0"
               />
-              {errors.current_balance && (
-                <p className="text-sm text-red-500">{t(errors.current_balance.message || "validation.balanceMin")}</p>
+              {errors.currentBalance && (
+                <p className="text-sm text-red-500">{t(errors.currentBalance.message || "validation.balanceMin")}</p>
               )}
             </div>
-
             <div className="space-y-2">
               <Label htmlFor="currency">{t("form.labels.currency")}</Label>
               <Select
@@ -654,10 +285,10 @@ export function CreateAccountModal({ isOpen, onClose }: CreateAccountModalProps)
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="account_number_masked">{t("form.labels.accountNumberMasked")}</Label>
+            <Label htmlFor="accountNumberMasked">{t("form.labels.accountNumberMasked")}</Label>
             <Input
-              id="account_number_masked"
-              {...register("account_number_masked")}
+              id="accountNumberMasked"
+              {...register("accountNumberMasked")}
               placeholder={t("form.placeholders.accountNumberMasked")}
             />
           </div>
@@ -665,37 +296,37 @@ export function CreateAccountModal({ isOpen, onClose }: CreateAccountModalProps)
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label htmlFor="is_active">{t("form.labels.isActive")}</Label>
+                <Label htmlFor="isActive">{t("form.labels.isActive")}</Label>
                 <p className="text-sm text-muted-foreground">{t("form.helpers.isActive")}</p>
               </div>
               <Switch
-                id="is_active"
+                id="isActive"
                 checked={isActive}
-                onCheckedChange={(checked) => setValue("is_active", checked)}
+                onCheckedChange={(checked) => setValue("isActive", checked)}
               />
             </div>
 
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label htmlFor="is_primary">{t("form.labels.isPrimary")}</Label>
+                <Label htmlFor="isPrimary">{t("form.labels.isPrimary")}</Label>
                 <p className="text-sm text-muted-foreground">{t("form.helpers.isPrimary")}</p>
               </div>
               <Switch
-                id="is_primary"
+                id="isPrimary"
                 checked={isPrimary}
-                onCheckedChange={(checked) => setValue("is_primary", checked)}
+                onCheckedChange={(checked) => setValue("isPrimary", checked)}
               />
             </div>
 
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label htmlFor="include_in_net_worth">{t("form.labels.includeInNetWorth")}</Label>
+                <Label htmlFor="includeInNetWorth">{t("form.labels.includeInNetWorth")}</Label>
                 <p className="text-sm text-muted-foreground">{t("form.helpers.includeInNetWorth")}</p>
               </div>
               <Switch
-                id="include_in_net_worth"
+                id="includeInNetWorth"
                 checked={includeInNetWorth}
-                onCheckedChange={(checked) => setValue("include_in_net_worth", checked)}
+                onCheckedChange={(checked) => setValue("includeInNetWorth", checked)}
               />
             </div>
           </div>

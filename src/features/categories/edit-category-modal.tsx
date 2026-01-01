@@ -18,7 +18,7 @@ import { useTranslation } from "@/contexts/i18n-context"
 
 type UpdateCategoryForm = {
   name: string
-  type: "income" | "expense" | "transfer"
+  type: "income" | "expense" | "both"
   parent_id?: string | "none"
   icon: string
   color: string
@@ -27,7 +27,7 @@ type UpdateCategoryForm = {
 
 const updateCategorySchema = (t: (key: string, options?: any) => string) => z.object({
   name: z.string().min(2, t("validation.nameMin")).max(100, t("validation.nameMax")),
-  type: z.enum(["income", "expense", "transfer"]),
+  type: z.enum(["income", "expense", "both"]),
   parent_id: z.string().uuid().optional().or(z.literal("none")),
   icon: z.string().min(1, t("validation.iconRequired")),
   color: z.string().regex(/^#([0-9a-f]{6}|[0-9a-f]{3})$/i, t("validation.colorInvalid")),
@@ -135,7 +135,7 @@ export function EditCategoryModal({ isOpen, onClose, category }: EditCategoryMod
               <SelectContent>
                 <SelectItem value="income">{t("types.income")}</SelectItem>
                 <SelectItem value="expense">{t("types.expense")}</SelectItem>
-                <SelectItem value="transfer">{t("types.transfer")}</SelectItem>
+                <SelectItem value="both">{t("types.both")}</SelectItem>
               </SelectContent>
             </Select>
           </div>

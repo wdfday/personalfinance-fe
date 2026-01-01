@@ -1,108 +1,32 @@
 /**
  * Budgets Service
  * Quản lý ngân sách theo danh mục và thời gian
+ * Synced with backend API - 2024-12-17
  */
 
 import { baseApiClient } from './base'
-
-// Types matching backend DTOs
-export interface AlertThreshold {
-  percentage: number
-  message?: string
-}
-
-export interface Budget {
-  id: string
-  user_id: string
-  name: string
-  description?: string
-  amount: number
-  currency: string
-  period: string
-  start_date: string
-  end_date?: string
-  category_id?: string
-  account_id?: string
-  spent_amount: number
-  remaining_amount: number
-  percentage_spent: number
-  status: string
-  last_calculated_at?: string
-  enable_alerts: boolean
-  alert_thresholds: AlertThreshold[]
-  notification_sent: boolean
-  allow_rollover: boolean
-  rollover_amount: number
-  carry_over_percent?: number
-  auto_adjust: boolean
-  auto_adjust_percentage?: number
-  auto_adjust_based_on?: string
-  created_at: string
-  updated_at: string
-  deleted_at?: string
-}
-
-export interface CreateBudgetRequest {
-  name: string
-  description?: string
-  amount: number
-  currency: string
-  period: string
-  start_date: string
-  end_date?: string
-  category_id?: string
-  account_id?: string
-  enable_alerts?: boolean
-  alert_thresholds?: AlertThreshold[]
-  allow_rollover?: boolean
-  carry_over_percent?: number
-  auto_adjust?: boolean
-  auto_adjust_percentage?: number
-  auto_adjust_based_on?: string
-}
-
-export interface UpdateBudgetRequest {
-  name?: string
-  description?: string
-  amount?: number
-  currency?: string
-  period?: string
-  start_date?: string
-  end_date?: string
-  category_id?: string
-  account_id?: string
-  enable_alerts?: boolean
-  alert_thresholds?: AlertThreshold[]
-  allow_rollover?: boolean
-  carry_over_percent?: number
-  auto_adjust?: boolean
-  auto_adjust_percentage?: number
-  auto_adjust_based_on?: string
-}
+import type {
+  Budget,
+  CreateBudgetRequest,
+  UpdateBudgetRequest,
+  BudgetSummary,
+  BudgetFilters,
+} from '@/types/api'
 
 export interface BudgetListResponse {
   items: Budget[]
   total: number
 }
 
-export interface BudgetSummary {
-  total_budgets: number
-  active_budgets: number
-  exceeded_budgets: number
-  warning_budgets: number
-  total_amount: number
-  total_spent: number
-  total_remaining: number
-  average_percentage: number
-  budgets_by_category: Record<string, any>
-}
+// Re-export types for backward compatibility
+export type { Budget, CreateBudgetRequest, UpdateBudgetRequest, BudgetSummary }
 
 class BudgetsService {
   /**
-   * Lấy danh sách budgets
+   * Lấy danh sách budgets với filters
    */
-  async getBudgets(): Promise<BudgetListResponse> {
-    return baseApiClient.get<BudgetListResponse>('/budgets')
+  async getBudgets(filters?: BudgetFilters): Promise<BudgetListResponse> {
+    return baseApiClient.get<BudgetListResponse>('/budgets', filters)
   }
 
   /**
@@ -127,7 +51,7 @@ class BudgetsService {
   }
 
   /**
-   * Xóa budget
+   * Xóa budget (soft delete)
    */
   async deleteBudget(id: string): Promise<void> {
     await baseApiClient.delete<void>(`/budgets/${id}`)
@@ -138,6 +62,13 @@ class BudgetsService {
    */
   async getBudgetSummary(): Promise<BudgetSummary> {
     return baseApiClient.get<BudgetSummary>('/budgets/summary')
+  }
+
+  /**
+   * Tính toán lại spent amount cho budget
+   */
+  async recalculateBudget(id: string): Promise<Budget> {
+    return baseApiClient.post<Budget>(`/budgets/${id}/recalculate`)
   }
 }
 

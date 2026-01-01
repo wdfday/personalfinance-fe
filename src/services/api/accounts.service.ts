@@ -1,15 +1,17 @@
 /**
  * Accounts Service
  * Quản lý tài khoản ngân hàng, ví điện tử, tiền mặt
+ * Note: Broker integration đã được chuyển sang brokers.service.ts
  */
 
 import { baseApiClient } from './base'
 
 // Types matching backend DTOs
 export type AccountType = 'cash' | 'bank' | 'savings' | 'credit_card' | 'investment' | 'crypto_wallet'
+export type BrokerType = 'okx' | 'ssi'
 
 // Institution enums by category
-export type DebitCreditInstitution = 
+export type DebitCreditInstitution =
   | 'VCB' // Vietcombank
   | 'TCB' // Techcombank
   | 'ACB' // Asia Commercial Bank
@@ -32,7 +34,6 @@ export type DebitCreditInstitution =
 
 export type InvestmentInstitution =
   | 'SSI' // SSI Securities
-  | 'CONSUMERID' // ConsumerID integration
   | 'VNDIRECT' // VNDirect
   | 'VCBS' // VCBS Securities
   | 'HSC' // HSC Securities
@@ -52,70 +53,81 @@ export type CryptoInstitution =
 
 export type InstitutionName = DebitCreditInstitution | InvestmentInstitution | CryptoInstitution
 
+// Broker Integration Interface
+export interface BrokerIntegration {
+  broker_type: BrokerType
+  broker_name?: string
+  is_active: boolean
+  auto_sync: boolean
+  sync_frequency: number // minutes
+  total_syncs: number
+  successful_syncs: number
+  failed_syncs: number
+  sync_assets: boolean
+  sync_transactions: boolean
+  sync_prices: boolean
+  sync_balance: boolean
+  // Note: Encrypted fields like api_key, access_token are not exposed to frontend
+}
+
+// Reference to broker connection (linked from brokers module)
+export interface LinkedBrokerInfo {
+  broker_connection_id?: string
+  broker_type?: 'okx' | 'ssi' | 'sepay'
+  broker_name?: string
+}
+
 export interface Account {
   id: string
-  user_id: string
-  account_name: string
-  account_type: AccountType
-  institution_name?: InstitutionName
-  current_balance: number
-  available_balance?: number
+  userId: string
+  accountName: string
+  accountType: AccountType
+  institutionName?: InstitutionName
+  currentBalance: number
+  availableBalance?: number
   currency: string
-  account_number_masked?: string
-  is_active: boolean
-  is_primary: boolean
-  include_in_net_worth: boolean
-  last_synced_at?: string
-  sync_status?: string
-  sync_error_message?: string
-  // API credentials for third-party integrations
-  api_key?: string
-  api_secret?: string
-  consumer_id?: string
-  consumer_key?: string
-  created_at: string
-  updated_at: string
+  accountNumberMasked?: string
+  isActive: boolean
+  isPrimary: boolean
+  includeInNetWorth: boolean
+  lastSyncedAt?: string
+  syncStatus?: 'active' | 'error' | 'disconnected'
+  syncErrorMessage?: string
+  // Reference to broker connection
+  brokerConnectionId?: string
+  linkedBroker?: LinkedBrokerInfo
+  createdAt: string
+  updatedAt: string
 }
 
 export interface CreateAccountRequest {
-  account_name: string
-  account_type: AccountType
-  institution_name?: InstitutionName
-  current_balance: number
-  available_balance?: number
+  accountName: string
+  accountType: AccountType
+  institutionName?: InstitutionName
+  currentBalance: number
+  availableBalance?: number
   currency: string
-  account_number_masked?: string
-  is_active?: boolean
-  is_primary?: boolean
-  include_in_net_worth?: boolean
-  // API credentials for third-party integrations
-  // For Investment (SSI, ConsumerID): use consumer_id and consumer_key
-  // For Crypto (OKX, Binance, etc): use api_key and api_secret
-  api_key?: string
-  api_secret?: string
-  consumer_id?: string
-  consumer_key?: string
+  accountNumberMasked?: string
+  isActive?: boolean
+  isPrimary?: boolean
+  includeInNetWorth?: boolean
 }
 
 export interface UpdateAccountRequest {
-  account_name?: string
-  account_type?: AccountType
-  institution_name?: InstitutionName
-  current_balance?: number
-  available_balance?: number
+  accountName?: string
+  accountType?: AccountType
+  institutionName?: InstitutionName
+  currentBalance?: number
+  availableBalance?: number
   currency?: string
-  account_number_masked?: string
-  is_active?: boolean
-  is_primary?: boolean
-  include_in_net_worth?: boolean
-  // API credentials for third-party integrations
-  // For Investment (SSI, ConsumerID): use consumer_id and consumer_key
-  // For Crypto (OKX, Binance, etc): use api_key and api_secret
-  api_key?: string
-  api_secret?: string
-  consumer_id?: string
-  consumer_key?: string
+  accountNumberMasked?: string
+  isActive?: boolean
+  isPrimary?: boolean
+  includeInNetWorth?: boolean
 }
+
+// NOTE: CreateAccountWithBrokerRequest đã deprecated
+// Sử dụng brokersService.createBroker() thay thế
 
 export interface AccountListResponse {
   items: Account[]
@@ -138,11 +150,14 @@ class AccountsService {
   }
 
   /**
-   * Tạo account mới
+   * Tạo account mới (standard)
    */
   async createAccount(data: CreateAccountRequest): Promise<Account> {
     return baseApiClient.post<Account>('/accounts', data)
   }
+
+  // NOTE: createAccountWithBroker() đã deprecated
+  // Sử dụng brokersService.createBroker() thay thế - server tự động sync accounts
 
   /**
    * Cập nhật account
@@ -164,13 +179,20 @@ class AccountsService {
   async getTotalBalance(): Promise<{ total: number; currency: string }> {
     const response = await this.getAccounts()
     const total = response.items
-      .filter(acc => acc.is_active && acc.include_in_net_worth)
-      .reduce((sum, acc) => sum + acc.current_balance, 0)
-    
+      .filter(acc => acc.isActive && acc.includeInNetWorth)
+      .reduce((sum, acc) => sum + acc.currentBalance, 0)
+
     return {
       total,
       currency: 'VND', // TODO: Handle multiple currencies
     }
+  }
+
+  /**
+   * Check if account has linked broker
+   */
+  hasLinkedBroker(account: Account): boolean {
+    return !!account.brokerConnectionId
   }
 }
 

@@ -1,17 +1,21 @@
 /**
  * Investments Service
- * Quản lý đầu tư (cổ phiếu, trái phiếu, quỹ, crypto, etc.)
+ * Quản lý danh mục đầu tư
+ * Synced with backend API - 2024-12-17
  */
 
 import { baseApiClient } from './base'
 
-// Types
+// Investment types
+export type InvestmentAssetType = 'stock' | 'bond' | 'mutual_fund' | 'etf' | 'crypto' | 'real_estate' | 'gold' | 'other'
+
 export interface Investment {
   id: string
-  user_id: number
+  user_id: string
+  account_id?: string
+  asset_type: InvestmentAssetType
   symbol: string
   name: string
-  type: 'stock' | 'bond' | 'mutual_fund' | 'etf' | 'crypto' | 'real_estate'
   quantity: number
   purchase_price: number
   current_price: number
@@ -20,48 +24,63 @@ export interface Investment {
   current_value: number
   total_gain_loss: number
   total_gain_loss_percentage: number
+  notes?: string
   is_active: boolean
   created_at: string
   updated_at: string
 }
 
 export interface CreateInvestmentRequest {
+  account_id?: string
+  asset_type: InvestmentAssetType
   symbol: string
   name: string
-  type: 'stock' | 'bond' | 'mutual_fund' | 'etf' | 'crypto' | 'real_estate'
   quantity: number
   purchase_price: number
   currency: string
   purchase_date: string
+  notes?: string
 }
 
 export interface UpdateInvestmentRequest {
+  account_id?: string
+  asset_type?: InvestmentAssetType
   symbol?: string
   name?: string
-  type?: 'stock' | 'bond' | 'mutual_fund' | 'etf' | 'crypto' | 'real_estate'
   quantity?: number
   purchase_price?: number
   current_price?: number
   currency?: string
   purchase_date?: string
+  notes?: string
   is_active?: boolean
 }
 
 export interface InvestmentListResponse {
-  investments: Investment[]
+  items: Investment[]
   total: number
+}
+
+export interface InvestmentSummary {
+  total_investments: number
+  total_value: number
+  total_cost: number
+  total_gain_loss: number
+  total_gain_loss_percentage: number
+  by_asset_type: Record<string, {
+    count: number
+    value: number
+    gain_loss: number
+    percentage: number
+  }>
 }
 
 class InvestmentsService {
   /**
-   * Lấy danh sách tất cả investments
+   * Lấy danh sách investments
    */
   async getInvestments(): Promise<InvestmentListResponse> {
-    const investments = await baseApiClient.get<Investment[]>('/investments')
-    return {
-      investments: Array.isArray(investments) ? investments : [],
-      total: Array.isArray(investments) ? investments.length : 0,
-    }
+    return baseApiClient.get<InvestmentListResponse>('/investments')
   }
 
   /**
@@ -86,92 +105,35 @@ class InvestmentsService {
   }
 
   /**
-   * Xóa investment
+   * Xóa investment (soft delete)
    */
   async deleteInvestment(id: string): Promise<void> {
     await baseApiClient.delete<void>(`/investments/${id}`)
   }
 
   /**
-   * Lấy active investments
+   * Lấy investment summary
    */
-  async getActiveInvestments(): Promise<Investment[]> {
-    const { investments } = await this.getInvestments()
-    return investments.filter(i => i.is_active)
+  async getInvestmentSummary(): Promise<InvestmentSummary> {
+    return baseApiClient.get<InvestmentSummary>('/investments/summary')
   }
 
   /**
-   * Lấy investments theo type
+   * Cập nhật giá hiện tại của investment
    */
-  async getInvestmentsByType(type: Investment['type']): Promise<Investment[]> {
-    const { investments } = await this.getInvestments()
-    return investments.filter(i => i.type === type)
+  async updateCurrentPrice(id: string, currentPrice: number): Promise<Investment> {
+    return this.updateInvestment(id, { current_price: currentPrice })
   }
 
   /**
-   * Tính tổng giá trị portfolio
+   * Lấy investments theo asset type
    */
-  async getPortfolioValue(): Promise<number> {
-    const { investments } = await this.getInvestments()
-    return investments
-      .filter(i => i.is_active)
-      .reduce((sum, i) => sum + i.current_value, 0)
-  }
-
-  /**
-   * Tính tổng lãi/lỗ
-   */
-  async getTotalGainLoss(): Promise<{
-    amount: number
-    percentage: number
-  }> {
-    const { investments } = await this.getInvestments()
-    const activeInvestments = investments.filter(i => i.is_active)
-    
-    const totalGainLoss = activeInvestments.reduce(
-      (sum, i) => sum + i.total_gain_loss,
-      0
-    )
-    
-    const totalInvested = activeInvestments.reduce(
-      (sum, i) => sum + (i.purchase_price * i.quantity),
-      0
-    )
-    
-    const percentage = totalInvested > 0 ? (totalGainLoss / totalInvested) * 100 : 0
-
-    return {
-      amount: totalGainLoss,
-      percentage,
-    }
-  }
-
-  /**
-   * Phân bổ portfolio theo type
-   */
-  async getPortfolioAllocation(): Promise<Record<string, number>> {
-    const { investments } = await this.getInvestments()
-    const activeInvestments = investments.filter(i => i.is_active)
-    
-    const totalValue = activeInvestments.reduce(
-      (sum, i) => sum + i.current_value,
-      0
-    )
-    
-    const allocation: Record<string, number> = {}
-    
-    activeInvestments.forEach(inv => {
-      if (!allocation[inv.type]) {
-        allocation[inv.type] = 0
-      }
-      allocation[inv.type] += (inv.current_value / totalValue) * 100
-    })
-    
-    return allocation
+  async getInvestmentsByAssetType(assetType: InvestmentAssetType): Promise<Investment[]> {
+    const response = await this.getInvestments()
+    return response.items.filter(inv => inv.asset_type === assetType)
   }
 }
 
 // Export singleton instance
 export const investmentsService = new InvestmentsService()
 export default investmentsService
-

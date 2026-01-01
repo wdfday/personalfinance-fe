@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit'
-import { apiClient, Goal, CreateGoalRequest } from '@/lib/api'
+import { goalsService, GoalListResponse } from '@/services/api/goals.service'
+import type { Goal, CreateGoalRequest, UpdateGoalRequest } from '@/types/api'
 
 interface GoalsState {
   goals: Goal[]
@@ -22,8 +23,8 @@ export const fetchGoals = createAsyncThunk(
   'goals/fetchGoals',
   async (_, { rejectWithValue }) => {
     try {
-      const response = await apiClient.getGoals()
-      return response
+      const response = await goalsService.getGoals()
+      return { goals: response.items, total: response.total }
     } catch (error) {
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to fetch goals')
     }
@@ -34,7 +35,7 @@ export const fetchGoal = createAsyncThunk(
   'goals/fetchGoal',
   async (id: string, { rejectWithValue }) => {
     try {
-      const goal = await apiClient.getGoal(id)
+      const goal = await goalsService.getGoal(id)
       return goal
     } catch (error) {
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to fetch goal')
@@ -46,7 +47,7 @@ export const createGoal = createAsyncThunk(
   'goals/createGoal',
   async (goalData: CreateGoalRequest, { rejectWithValue }) => {
     try {
-      const goal = await apiClient.createGoal(goalData)
+      const goal = await goalsService.createGoal(goalData)
       return goal
     } catch (error) {
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to create goal')
@@ -56,9 +57,9 @@ export const createGoal = createAsyncThunk(
 
 export const updateGoal = createAsyncThunk(
   'goals/updateGoal',
-  async ({ id, data }: { id: string; data: Partial<CreateGoalRequest> }, { rejectWithValue }) => {
+  async ({ id, data }: { id: string; data: UpdateGoalRequest }, { rejectWithValue }) => {
     try {
-      const goal = await apiClient.updateGoal(id, data)
+      const goal = await goalsService.updateGoal(id, data)
       return goal
     } catch (error) {
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to update goal')
@@ -70,7 +71,7 @@ export const deleteGoal = createAsyncThunk(
   'goals/deleteGoal',
   async (id: string, { rejectWithValue }) => {
     try {
-      await apiClient.deleteGoal(id)
+      await goalsService.deleteGoal(id)
       return id
     } catch (error) {
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to delete goal')

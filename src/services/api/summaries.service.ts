@@ -37,13 +37,18 @@ export interface BudgetSummary {
 }
 
 export interface GoalSummary {
-  total_goals: number
-  active_goals: number
-  completed_goals: number
-  total_target_amount: number
-  total_current_amount: number
-  overall_progress: number
-  last_updated: string
+  totalGoals: number
+  activeGoals: number
+  completedGoals: number
+  overdueGoals?: number
+  totalTargetAmount: number
+  totalCurrentAmount: number
+  totalRemaining: number
+  overallProgress?: number
+  averageProgress: number
+  goalsByType?: Record<string, any>
+  goalsByPriority?: Record<string, number>
+  lastUpdated?: string
 }
 
 export interface InvestmentSummary {
@@ -142,17 +147,17 @@ class SummariesService {
     }
 
     const now = new Date()
-    
+
     for (let i = months - 1; i >= 0; i--) {
       const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
       const startDate = new Date(date.getFullYear(), date.getMonth(), 1).toISOString()
       const endDate = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59).toISOString()
-      
+
       const summary = await this.getTransactionSummary({
         start_date: startDate,
         end_date: endDate,
       })
-      
+
       data.labels.push(
         date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
       )

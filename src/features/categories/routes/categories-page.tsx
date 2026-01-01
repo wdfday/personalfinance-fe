@@ -28,7 +28,7 @@ export default function CategoriesPage() {
   const numberLocale = locale === "vi" ? "vi-VN" : "en-US"
 
   const [searchTerm, setSearchTerm] = useState("")
-  const [typeFilter, setTypeFilter] = useState<"all" | "income" | "expense" | "transfer">("all")
+  const [typeFilter, setTypeFilter] = useState<"all" | "income" | "expense" | "both">("all")
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all")
 
   useEffect(() => {
@@ -56,7 +56,7 @@ export default function CategoriesPage() {
       total: categories.length,
       income: categories.filter((c) => c.type === "income").length,
       expense: categories.filter((c) => c.type === "expense").length,
-      transfer: categories.filter((c) => c.type === "transfer").length,
+      both: categories.filter((c) => c.type === "both").length,
       active: categories.filter((c) => c.is_active).length,
       inactive: categories.filter((c) => !c.is_active).length,
       parents: totalParents,
@@ -67,7 +67,7 @@ export default function CategoriesPage() {
     const map: Record<string, string> = {
       income: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
       expense: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
-      transfer: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+      both: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
     }
     return map[type] || "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200"
   }
@@ -150,10 +150,10 @@ export default function CategoriesPage() {
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-blue-600">{t("summary.transfer.title")}</CardTitle>
+              <CardTitle className="text-sm font-medium text-blue-600">{t("summary.both.title")}</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-blue-600">{stats.transfer}</div>
+              <div className="text-2xl font-bold text-blue-600">{stats.both}</div>
             </CardContent>
           </Card>
           <Card>
@@ -211,7 +211,7 @@ export default function CategoriesPage() {
                     <SelectItem value="all">{t("filters.type.all")}</SelectItem>
                     <SelectItem value="income">{t("filters.type.income")}</SelectItem>
                     <SelectItem value="expense">{t("filters.type.expense")}</SelectItem>
-                    <SelectItem value="transfer">{t("filters.type.transfer")}</SelectItem>
+                    <SelectItem value="both">{t("filters.type.both")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

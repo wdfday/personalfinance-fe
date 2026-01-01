@@ -1,65 +1,39 @@
 /**
  * Goals Service
  * Quản lý mục tiêu tài chính
+ * Synced with backend API - 2024-12-17
  */
 
 import { baseApiClient } from './base'
-
-// Types
-export interface Goal {
-  id: string
-  user_id: number
-  name: string
-  description: string
-  target_amount: number
-  current_amount: number
-  currency: string
-  target_date: string
-  status: 'active' | 'completed' | 'cancelled' | 'paused'
-  priority: 'low' | 'medium' | 'high'
-  category: string
-  is_active: boolean
-  created_at: string
-  updated_at: string
-}
-
-export interface CreateGoalRequest {
-  name: string
-  description: string
-  target_amount: number
-  currency: string
-  target_date: string
-  priority: 'low' | 'medium' | 'high'
-  category: string
-}
-
-export interface UpdateGoalRequest {
-  name?: string
-  description?: string
-  target_amount?: number
-  current_amount?: number
-  currency?: string
-  target_date?: string
-  status?: 'active' | 'completed' | 'cancelled' | 'paused'
-  priority?: 'low' | 'medium' | 'high'
-  category?: string
-  is_active?: boolean
-}
+import type {
+  Goal,
+  CreateGoalRequest,
+  UpdateGoalRequest,
+  GoalSummary,
+  GoalProgress,
+  GoalFilters,
+  ContributeToGoalRequest,
+} from '@/types/api'
 
 export interface GoalListResponse {
-  goals: Goal[]
+  items: Goal[]
   total: number
 }
 
+// Re-export types for backward compatibility
+export type { Goal, CreateGoalRequest, UpdateGoalRequest, GoalSummary, GoalProgress }
+
 class GoalsService {
   /**
-   * Lấy danh sách tất cả goals
+   * Lấy danh sách goals với filters
    */
-  async getGoals(): Promise<GoalListResponse> {
-    const goals = await baseApiClient.get<Goal[]>('/goals')
+  async getGoals(filters?: GoalFilters): Promise<GoalListResponse> {
+    const data = await baseApiClient.get<Goal[]>('/goals', filters)
+    // Handle case where data might be wrapped or just an array
+    const goals = Array.isArray(data) ? data : (data as any)?.items || []
     return {
-      goals: Array.isArray(goals) ? goals : [],
-      total: Array.isArray(goals) ? goals.length : 0,
+      items: goals,
+      total: goals.length
     }
   }
 
@@ -85,62 +59,55 @@ class GoalsService {
   }
 
   /**
-   * Xóa goal
+   * Xóa goal (soft delete)
    */
   async deleteGoal(id: string): Promise<void> {
     await baseApiClient.delete<void>(`/goals/${id}`)
   }
 
   /**
-   * Lấy active goals
+   * Đóng góp vào goal
    */
-  async getActiveGoals(): Promise<Goal[]> {
-    const { goals } = await this.getGoals()
-    return goals.filter(g => g.is_active && g.status === 'active')
+  async contributeToGoal(id: string, data: ContributeToGoalRequest): Promise<Goal> {
+    return baseApiClient.post<Goal>(`/goals/${id}/contribute`, data)
   }
 
   /**
-   * Lấy goals theo priority
+   * Lấy goal progress
    */
-  async getGoalsByPriority(priority: 'low' | 'medium' | 'high'): Promise<Goal[]> {
-    const { goals } = await this.getGoals()
-    return goals.filter(g => g.priority === priority)
+  async getGoalProgress(id: string): Promise<GoalProgress> {
+    return baseApiClient.get<GoalProgress>(`/goals/${id}/progress`)
   }
 
   /**
-   * Tính progress percentage
+   * Lấy goal summary
    */
-  getGoalProgress(goal: Goal): number {
-    if (goal.target_amount === 0) return 0
-    return Math.min((goal.current_amount / goal.target_amount) * 100, 100)
+  async getGoalSummary(): Promise<GoalSummary> {
+    return baseApiClient.get<GoalSummary>('/goals/summary')
   }
 
   /**
-   * Kiểm tra xem goal đã hoàn thành chưa
+   * Đánh dấu goal hoàn thành
    */
-  isGoalCompleted(goal: Goal): boolean {
-    return goal.current_amount >= goal.target_amount
+  async completeGoal(id: string): Promise<Goal> {
+    return baseApiClient.post<Goal>(`/goals/${id}/complete`)
   }
 
   /**
-   * Tính số tiền còn thiếu
+   * Tạm dừng goal
    */
-  getRemainingAmount(goal: Goal): number {
-    return Math.max(goal.target_amount - goal.current_amount, 0)
+  async pauseGoal(id: string): Promise<Goal> {
+    return baseApiClient.post<Goal>(`/goals/${id}/pause`)
   }
 
   /**
-   * Tính số ngày còn lại
+   * Tiếp tục goal
    */
-  getDaysRemaining(goal: Goal): number {
-    const now = new Date()
-    const targetDate = new Date(goal.target_date)
-    const diffTime = targetDate.getTime() - now.getTime()
-    return Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+  async resumeGoal(id: string): Promise<Goal> {
+    return baseApiClient.post<Goal>(`/goals/${id}/resume`)
   }
 }
 
 // Export singleton instance
 export const goalsService = new GoalsService()
 export default goalsService
-

@@ -16,7 +16,7 @@ import {
   setFilters,
   clearFilters,
 } from '@/features/transactions/transactionsSlice'
-import type { CreateTransactionRequest, UpdateTransactionRequest, TransactionQueryParams } from '@/services/api'
+import type { CreateTransactionRequest, UpdateTransactionRequest, TransactionQueryParams } from '@/features/transactions/types'
 
 export function useTransactionsRedux() {
   const dispatch = useAppDispatch()
