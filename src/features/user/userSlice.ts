@@ -4,8 +4,8 @@
  */
 
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit'
-import { userService } from '@/services/api'
-import type { User, UpdateUserProfileRequest } from '@/services/api'
+import { usersService, authService } from '@/services/api'
+import type { UserProfile as User, UpdateUserProfileRequest } from '@/services/api/types/users'
 import { getErrorMessage } from '@/services/api/utils'
 
 interface UserState {
@@ -27,7 +27,7 @@ export const fetchCurrentUser = createAsyncThunk(
   'user/fetchCurrent',
   async (_, { rejectWithValue }) => {
     try {
-      const user = await userService.getCurrentUser()
+      const user = await usersService.getMe()
       return user
     } catch (error) {
       return rejectWithValue(getErrorMessage(error))
@@ -39,7 +39,7 @@ export const updateUserProfile = createAsyncThunk(
   'user/updateProfile',
   async (data: UpdateUserProfileRequest, { rejectWithValue }) => {
     try {
-      const updatedUser = await userService.updateProfile(data)
+      const updatedUser = await usersService.updateProfile(data)
       return updatedUser
     } catch (error) {
       return rejectWithValue(getErrorMessage(error))
@@ -54,7 +54,7 @@ export const changePassword = createAsyncThunk(
     { rejectWithValue }
   ) => {
     try {
-      await userService.changePassword(data)
+      await authService.changePassword(data.current_password, data.new_password)
       return { success: true }
     } catch (error) {
       return rejectWithValue(getErrorMessage(error))

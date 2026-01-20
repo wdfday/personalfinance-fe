@@ -35,9 +35,10 @@ const createCategorySchema = (t: (key: string, options?: any) => string) => z.ob
 interface CreateCategoryModalProps {
   isOpen: boolean
   onClose: () => void
+  initialParentId?: string
 }
 
-export function CreateCategoryModal({ isOpen, onClose }: CreateCategoryModalProps) {
+export function CreateCategoryModal({ isOpen, onClose, initialParentId }: CreateCategoryModalProps) {
   const dispatch = useAppDispatch()
   const { categories } = useAppSelector((state) => state.categories)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -70,10 +71,26 @@ export function CreateCategoryModal({ isOpen, onClose }: CreateCategoryModalProp
     },
   })
 
+  // Update form when modal opens with initialParentId
+  useEffect(() => {
+    if (isOpen) {
+      // Find parent category to set type if needed
+      const parent = categories.find(c => c.id === initialParentId)
+      
+      reset({
+        name: "",
+        type: parent ? parent.type : "expense", // Inherit type from parent if exists
+        parent_id: initialParentId || "none",
+        icon: "🧾",
+        color: "#2563eb",
+      })
+    }
+  }, [isOpen, initialParentId, reset, categories])
+
   const selectedType = watch("type")
 
   const parentCategories = useMemo(
-    () => categories.filter((category) => !category.parent_id && category.type === selectedType && category.is_active),
+    () => (categories || []).filter((category) => !category.parent_id && category.type === selectedType && category.is_active),
     [categories, selectedType]
   )
 

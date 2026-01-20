@@ -4,9 +4,13 @@
  */
 
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit'
-import { accountsService } from '@/services/api'
-import type { Account, CreateAccountRequest, UpdateAccountRequest, AccountListResponse } from '@/services/api'
-import { getErrorMessage } from '@/services/api/utils'
+import { 
+  accountsService, 
+  getErrorMessage,
+  type Account, 
+  type CreateAccountRequest, 
+  type UpdateAccountRequest 
+} from '@/services/api'
 
 interface AccountsState {
   accounts: Account[]
@@ -29,7 +33,7 @@ export const fetchAccounts = createAsyncThunk(
   'accounts/fetchAccounts',
   async (_, { rejectWithValue }) => {
     try {
-      const response = await accountsService.getAccounts()
+      const response = await accountsService.getAll()
       return response
     } catch (error) {
       return rejectWithValue(getErrorMessage(error))
@@ -41,7 +45,7 @@ export const fetchAccount = createAsyncThunk(
   'accounts/fetchAccount',
   async (id: string, { rejectWithValue }) => {
     try {
-      const account = await accountsService.getAccount(id)
+      const account = await accountsService.getById(id)
       return account
     } catch (error) {
       return rejectWithValue(getErrorMessage(error))
@@ -53,7 +57,7 @@ export const createAccount = createAsyncThunk(
   'accounts/createAccount',
   async (accountData: CreateAccountRequest, { rejectWithValue }) => {
     try {
-      const account = await accountsService.createAccount(accountData)
+      const account = await accountsService.create(accountData)
       return account
     } catch (error) {
       return rejectWithValue(getErrorMessage(error))
@@ -65,7 +69,7 @@ export const updateAccount = createAsyncThunk(
   'accounts/updateAccount',
   async ({ id, data }: { id: string; data: UpdateAccountRequest }, { rejectWithValue }) => {
     try {
-      const account = await accountsService.updateAccount(id, data)
+      const account = await accountsService.update(id, data)
       return account
     } catch (error) {
       return rejectWithValue(getErrorMessage(error))
@@ -77,7 +81,7 @@ export const deleteAccount = createAsyncThunk(
   'accounts/deleteAccount',
   async (id: string, { rejectWithValue }) => {
     try {
-      await accountsService.deleteAccount(id)
+      await accountsService.delete(id)
       return id
     } catch (error) {
       return rejectWithValue(getErrorMessage(error))

@@ -4,17 +4,22 @@ import { useState, useEffect } from "react"
 import { useAppDispatch, useAppSelector } from "@/lib/hooks"
 import { createTransaction } from "@/features/transactions/transactionsSlice"
 import { fetchAccounts } from "@/features/accounts/accountsSlice"
+import { fetchGoals } from "@/features/goals/goalsSlice"
+import { fetchBudgets } from "@/features/budgets/budgetsSlice"
+import { fetchDebts } from "@/features/debts/debtsSlice"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { TransactionLinkSelector } from "@/features/transactions/components/transaction-link-selector"
+import { TransactionTagsInput } from "@/features/transactions/components/transaction-tags-input"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
 import { toast } from "sonner"
-import type { CreateTransactionRequest, TransactionDirection, TransactionInstrument, TransactionSource } from "@/types/api"
+import type { CreateTransactionRequest, TransactionDirection, TransactionInstrument, TransactionSource, TransactionLink } from "@/types/api"
 
 // Direction-based model schema
 const createTransactionSchema = z.object({
@@ -33,6 +38,7 @@ const createTransactionSchema = z.object({
   userCategoryId: z.string().optional(),
   isTransfer: z.boolean().optional(),
   tags: z.array(z.string()).optional(),
+  links: z.array(z.object({ type: z.string(), id: z.string() })).optional(),
 })
 
 type CreateTransactionForm = z.infer<typeof createTransactionSchema>
@@ -44,14 +50,28 @@ interface CreateTransactionModalProps {
 
 export function CreateTransactionModal({ isOpen, onClose }: CreateTransactionModalProps) {
   const dispatch = useAppDispatch()
-  const { accounts } = useAppSelector((state) => state.accounts)
+  const { accounts = [] } = useAppSelector((state) => state.accounts)
+  const { goals = [] } = useAppSelector((state) => state.goals)
+  const { budgets = [] } = useAppSelector((state) => state.budgets)
+  const { debts = [] } = useAppSelector((state) => state.debts)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [selectedLinks, setSelectedLinks] = useState<TransactionLink[]>([])
+  const [tags, setTags] = useState<string[]>([])
 
   useEffect(() => {
     if (accounts.length === 0) {
       dispatch(fetchAccounts())
     }
-  }, [dispatch, accounts.length])
+    if (goals.length === 0) {
+      dispatch(fetchGoals())
+    }
+    if (budgets.length === 0) {
+      dispatch(fetchBudgets())
+    }
+    if (debts.length === 0) {
+      dispatch(fetchDebts())
+    }
+  }, [dispatch, accounts.length, goals.length, budgets.length, debts.length])
 
   const {
     register,
@@ -96,12 +116,15 @@ export function CreateTransactionModal({ isOpen, onClose }: CreateTransactionMod
         counterpartyName: data.counterpartyName,
         userCategoryId: data.userCategoryId || undefined,
         isTransfer: data.isTransfer,
-        tags: data.tags,
+        tags: tags.length > 0 ? tags : undefined,
+        links: selectedLinks.length > 0 ? selectedLinks : undefined,
       }
 
       await dispatch(createTransaction(payload)).unwrap()
       toast.success("Tạo giao dịch thành công!")
       reset()
+      setSelectedLinks([])
+      setTags([])
       onClose()
     } catch (error) {
       toast.error("Lỗi tạo giao dịch: " + error)
@@ -112,6 +135,8 @@ export function CreateTransactionModal({ isOpen, onClose }: CreateTransactionMod
 
   const handleClose = () => {
     reset()
+    setSelectedLinks([])
+    setTags([])
     onClose()
   }
 
@@ -269,6 +294,30 @@ export function CreateTransactionModal({ isOpen, onClose }: CreateTransactionMod
               {...register("userNote")}
               placeholder="Ghi chú bổ sung"
               rows={2}
+            />
+          </div>
+
+          {/* Links */}
+          <div className="space-y-2">
+            <Label>Liên kết</Label>
+            <TransactionLinkSelector
+              value={selectedLinks}
+              onChange={setSelectedLinks}
+              goals={goals.map(g => ({ id: g.id, name: g.name }))}
+              budgets={budgets.map(b => ({ id: b.id, name: b.name }))}
+              debts={debts.map(d => ({ id: d.id, name: d.name }))}
+            />
+            <p className="text-xs text-muted-foreground">
+              Liên kết transaction với Goal, Budget, hoặc Debt
+            </p>
+          </div>
+
+          {/* Tags */}
+          <div className="space-y-2">
+            <Label>Tags</Label>
+            <TransactionTagsInput
+              value={tags}
+              onChange={setTags}
             />
           </div>
 

@@ -1,5 +1,44 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit'
-import { apiClient } from '@/lib/api'
+import { accountsService }from "@/services/api/services/accounts.service"
+import { transactionsService } from "@/services/api/services/transactions.service"
+import type { Account } from '@/services/api'
+
+// Helper to calculate account summary from accounts list
+function calculateAccountSummary(accounts: Account[]) {
+  let totalAssets = 0
+  let totalLiabilities = 0
+  const currencyAllocation: Record<string, number> = {}
+  let lastUpdated = ''
+
+  for (const acc of accounts) {
+    const balance = acc.currentBalance
+
+    // Credit cards are liabilities
+    if (acc.accountType === 'credit_card') {
+      totalLiabilities += balance
+    } else {
+      totalAssets += balance
+    }
+
+    // Currency allocation
+    currencyAllocation[acc.currency] = (currencyAllocation[acc.currency] || 0) + balance
+
+    // Track last updated
+    if (acc.updatedAt > lastUpdated) {
+      lastUpdated = acc.updatedAt
+    }
+  }
+
+  return {
+    total_balance: totalAssets - totalLiabilities,
+    total_assets: totalAssets,
+    total_liabilities: totalLiabilities,
+    net_worth: totalAssets - totalLiabilities,
+    currency_allocation: currencyAllocation,
+    account_count: accounts.length,
+    last_updated: lastUpdated || new Date().toISOString(),
+  }
+}
 
 interface DashboardState {
   accountSummary: {
@@ -44,8 +83,8 @@ export const fetchAccountSummary = createAsyncThunk(
   'dashboard/fetchAccountSummary',
   async (_, { rejectWithValue }) => {
     try {
-      const summary = await apiClient.getAccountSummary()
-      return summary
+      const response = await accountsService.getAll()
+      return calculateAccountSummary(response.items)
     } catch (error) {
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to fetch account summary')
     }
@@ -54,13 +93,13 @@ export const fetchAccountSummary = createAsyncThunk(
 
 export const fetchTransactionSummary = createAsyncThunk(
   'dashboard/fetchTransactionSummary',
-  async (params?: {
+  async (params: {
     period?: string
     start_date?: string
     end_date?: string
-  }, { rejectWithValue }) => {
+  } | undefined, { rejectWithValue }) => {
     try {
-      const summary = await apiClient.getTransactionSummary(params)
+      const summary = await transactionsService.getSummary(params)
       return summary
     } catch (error) {
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to fetch transaction summary')
@@ -70,17 +109,20 @@ export const fetchTransactionSummary = createAsyncThunk(
 
 export const fetchDashboardData = createAsyncThunk(
   'dashboard/fetchDashboardData',
-  async (params?: {
+  async (params: {
     period?: string
     start_date?: string
     end_date?: string
-  }, { rejectWithValue }) => {
+  } | undefined, { rejectWithValue }) => {
     try {
-      const [accountSummary, transactionSummary] = await Promise.all([
-        apiClient.getAccountSummary(),
-        apiClient.getTransactionSummary(params),
+      const [accountsResponse, transactionSummary] = await Promise.all([
+        accountsService.getAll(),
+        transactionsService.getSummary(params),
       ])
-      return { accountSummary, transactionSummary }
+      return { 
+        accountSummary: calculateAccountSummary(accountsResponse.items), 
+        transactionSummary 
+      }
     } catch (error) {
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to fetch dashboard data')
     }
@@ -157,4 +199,3 @@ const dashboardSlice = createSlice({
 
 export const { clearError, setDateRange, clearDateRange } = dashboardSlice.actions
 export default dashboardSlice
-

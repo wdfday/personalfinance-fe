@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { useAppDispatch, useAppSelector } from "@/lib/hooks"
 import { checkAuth } from "@/features/auth/authSlice"
+import { fetchCategories } from "@/features/categories/categoriesSlice"
 import { Loader2 } from "lucide-react"
 
 interface AuthGuardProps {
@@ -28,6 +29,12 @@ export function AuthGuard({ children }: AuthGuardProps) {
     if (!hasCheckedAuth.current && !isAuthenticated) {
       hasCheckedAuth.current = true
       dispatch(checkAuth())
+    }
+  }, [dispatch, isAuthenticated])
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      dispatch(fetchCategories())
     }
   }, [dispatch, isAuthenticated])
 

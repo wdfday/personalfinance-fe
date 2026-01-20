@@ -5,8 +5,9 @@
  */
 
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit'
-import { authService, userService } from '@/services/api'
-import type { UserAuthInfo } from '@/services/api'
+import { authService } from '@/services/api/services/auth.service'
+import { usersService } from '@/services/api/services/users.service'
+import type { UserAuthInfo } from '@/services/api/types/auth'
 import { getErrorMessage } from '@/services/api/utils'
 
 export interface LoginRequest {
@@ -79,7 +80,7 @@ export const checkAuth = createAsyncThunk(
       }
       
       // Get current user from User Service
-      const user = await userService.getCurrentUser()
+      const user = await usersService.getMe()
       
       return { user, token }
     } catch (error) {

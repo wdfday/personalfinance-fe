@@ -17,9 +17,12 @@ import { toast } from "sonner"
 const createDebtSchema = z.object({
   name: z.string().min(1, "Tên nợ là bắt buộc"),
   description: z.string().optional(),
-  type: z.enum(["credit_card", "personal_loan", "mortgage", "auto_loan", "student_loan", "medical", "other"], {
+  type: z.enum(["credit_card", "personal_loan", "mortgage", "other"], {
     required_error: "Loại nợ là bắt buộc",
   }),
+  behavior: z.enum(["revolving", "installment", "interest_only"], {
+    required_error: "Tính chất nợ là bắt buộc",
+  }).default("installment"),
   principal_amount: z.number().min(0.01, "Số tiền gốc phải lớn hơn 0"),
   current_balance: z.number().min(0, "Số dư hiện tại không được âm"),
   interest_rate: z.number().min(0).max(100).default(0),
@@ -50,12 +53,12 @@ export function CreateDebtModal({ isOpen, onClose }: CreateDebtModalProps) {
     formState: { errors },
     reset,
     setValue,
-    watch,
   } = useForm<CreateDebtForm>({
     resolver: zodResolver(createDebtSchema),
     defaultValues: {
       name: "",
       type: "credit_card",
+      behavior: "revolving",
       principal_amount: 0,
       current_balance: 0,
       interest_rate: 0,
@@ -73,6 +76,7 @@ export function CreateDebtModal({ isOpen, onClose }: CreateDebtModalProps) {
         name: data.name,
         description: data.description || undefined,
         type: data.type,
+        behavior: data.behavior,
         principal_amount: data.principal_amount,
         current_balance: data.current_balance,
         interest_rate: data.interest_rate,
@@ -137,14 +141,31 @@ export function CreateDebtModal({ isOpen, onClose }: CreateDebtModalProps) {
                   <SelectItem value="credit_card">Thẻ tín dụng</SelectItem>
                   <SelectItem value="personal_loan">Vay cá nhân</SelectItem>
                   <SelectItem value="mortgage">Vay thế chấp</SelectItem>
-                  <SelectItem value="auto_loan">Vay mua xe</SelectItem>
-                  <SelectItem value="student_loan">Vay học phí</SelectItem>
-                  <SelectItem value="medical">Nợ y tế</SelectItem>
                   <SelectItem value="other">Khác</SelectItem>
                 </SelectContent>
               </Select>
               {errors.type && (
                 <p className="text-sm text-red-500">{errors.type.message}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="behavior">Tính chất nợ *</Label>
+              <Select
+                onValueChange={(value) => setValue("behavior", value as any)}
+                defaultValue="revolving"
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Chọn tính chất" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="revolving">Dư nợ giảm dần (Revolving)</SelectItem>
+                  <SelectItem value="installment">Trả góp (Installment)</SelectItem>
+                  <SelectItem value="interest_only">Trả lãi (Interest Only)</SelectItem>
+                </SelectContent>
+              </Select>
+              {errors.behavior && (
+                <p className="text-sm text-red-500">{errors.behavior.message}</p>
               )}
             </div>
           </div>
@@ -298,5 +319,6 @@ export function CreateDebtModal({ isOpen, onClose }: CreateDebtModalProps) {
     </Dialog>
   )
 }
+
 
 

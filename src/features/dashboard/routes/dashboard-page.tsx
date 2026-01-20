@@ -8,7 +8,6 @@ import { fetchTransactions } from "@/features/transactions/transactionsSlice"
 import { AccountsOverview } from "@/features/accounts/components/accounts-overview"
 import { RecentTransactions } from "@/features/transactions/components/recent-transactions"
 import { CalendarEventsWidget } from "@/features/dashboard/components/calendar-events-widget"
-import { BusinessMetrics } from "@/features/dashboard/components/business-metrics"
 
 export default function Dashboard() {
   const dispatch = useAppDispatch()
@@ -18,7 +17,7 @@ export default function Dashboard() {
     // Fetch all dashboard data
     dispatch(fetchDashboardData())
     dispatch(fetchAccounts())
-    dispatch(fetchTransactions({ limit: 5 }))
+    dispatch(fetchTransactions({}))
   }, [dispatch])
 
   if (isLoading) {
@@ -47,8 +46,6 @@ export default function Dashboard() {
           <CalendarEventsWidget />
         </div>
       </div>
-
-      <BusinessMetrics />
     </div>
   )
 }

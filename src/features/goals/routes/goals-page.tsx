@@ -2,23 +2,77 @@
 
 import { useEffect, useState } from "react"
 import { useAppDispatch, useAppSelector } from "@/lib/hooks"
-import { fetchGoals } from "@/features/goals/goalsSlice"
+import { fetchGoals, archiveGoal, deleteGoal } from "@/features/goals/goalsSlice"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { Plus, Edit, Trash2, Eye, Target } from "lucide-react"
+import { Plus, Edit, Trash2, Target, MoreVertical, Archive } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { useToast } from "@/hooks/use-toast"
+// Note: GoalPrioritizationModal temporarily disabled due to AHPOutput type mismatch
+// import { GoalPrioritizationModal } from "@/features/goals/components/goal-prioritization-modal"
+import { CreateGoalModal } from "@/features/goals/components/create-goal-modal"
+import { EditGoalModal } from "@/features/goals/components/edit-goal-modal"
+// import { goalPrioritizationService } from "@/services/api/services/goal-prioritization.service"
+import type { Goal } from "@/services/api/types/goals"
 
 export default function GoalsPage() {
   const dispatch = useAppDispatch()
   const { goals, isLoading, error } = useAppSelector((state) => state.goals)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [selectedGoal, setSelectedGoal] = useState<Goal | null>(null)
+  const { toast } = useToast()
 
   useEffect(() => {
     dispatch(fetchGoals())
   }, [dispatch])
 
-  const formatCurrency = (amount: number, currency: string = 'USD') => {
+  // Action handlers
+  const handleArchive = async (id: string, name: string) => {
+    try {
+      await dispatch(archiveGoal(id)).unwrap()
+      toast({
+        title: "Goal archived",
+        description: `"${name}" has been archived successfully.`,
+      })
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to archive goal. Please try again.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleDelete = async (id: string, name: string) => {
+    if (!confirm(`Are you sure you want to permanently delete "${name}"?`)) {
+      return
+    }
+
+    try {
+      await dispatch(deleteGoal(id)).unwrap()
+      toast({
+        title: "Goal deleted",
+        description: `"${name}" has been deleted permanently.`,
+      })
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete goal. Please try again.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const formatCurrency = (amount: number, currency: string = 'VND') => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: currency,
@@ -65,6 +119,9 @@ export default function GoalsPage() {
     return diffDays
   }
 
+  // Note: Goal prioritization temporarily disabled
+  // const goalsForRating = goals.map(goal => goalPrioritizationService.convertGoalToRating(goal))
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -91,15 +148,26 @@ export default function GoalsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight">Financial Goals</h1>
-        <Button onClick={() => setIsCreateModalOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Create Goal
-        </Button>
+        <div className="flex gap-2">
+          {/* Note: AI prioritization temporarily disabled
+          {goals.length >= 2 && (
+            <GoalPrioritizationModal
+              goals={goalsForRating}
+              userId="019bb5c5-9c50-72c0-9790-9560effa7331"
+            />
+          )}
+          */}
+          <Button onClick={() => setIsCreateModalOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Create Goal
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {goals.map((goal) => {
-          const progressPercentage = getProgressPercentage(goal.currentAmount, goal.targetAmount)
+          // Use backend-calculated values instead of recalculating
+          const progressPercentage = goal.progressPercentage ?? getProgressPercentage(goal.currentAmount, goal.targetAmount)
           const daysRemaining = goal.targetDate ? getDaysRemaining(goal.targetDate) : 0
           const isOverdue = daysRemaining < 0 && goal.status === 'active'
 
@@ -139,7 +207,11 @@ export default function GoalsPage() {
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Category</span>
-                      <span className="capitalize">{goal.type}</span>
+                      <span className="capitalize">{goal.category}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Behavior</span>
+                      <span className="capitalize">{goal.behavior || 'flexible'}</span>
                     </div>
                     {goal.targetDate && (
                       <div className="flex justify-between text-sm">
@@ -159,16 +231,35 @@ export default function GoalsPage() {
                     )}
                   </div>
 
-                  <div className="flex space-x-2 pt-2">
-                    <Button size="sm" variant="outline">
-                      <Eye className="h-4 w-4" />
-                    </Button>
-                    <Button size="sm" variant="outline">
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button size="sm" variant="outline" className="text-red-600 hover:text-red-700">
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                  <div className="flex justify-end pt-2">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button size="sm" variant="ghost">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => {
+                          setSelectedGoal(goal)
+                          setIsEditModalOpen(true)
+                        }}>
+                          <Edit className="mr-2 h-4 w-4" />
+                          Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => handleArchive(goal.id, goal.name)}>
+                          <Archive className="mr-2 h-4 w-4" />
+                          Archive
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => handleDelete(goal.id, goal.name)}
+                          className="text-red-600 focus:text-red-600"
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Delete Permanently
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </div>
               </CardContent>
@@ -194,6 +285,17 @@ export default function GoalsPage() {
           </CardContent>
         </Card>
       )}
+
+      <CreateGoalModal
+        open={isCreateModalOpen}
+        onOpenChange={setIsCreateModalOpen}
+      />
+
+      <EditGoalModal
+        open={isEditModalOpen}
+        onOpenChange={setIsEditModalOpen}
+        goal={selectedGoal}
+      />
     </div>
   )
 }

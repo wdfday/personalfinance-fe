@@ -4,16 +4,15 @@
  */
 
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit'
-import { transactionsService } from '@/services/api'
-import type {
-  Transaction,
-  CreateTransactionRequest,
-  UpdateTransactionRequest,
-  TransactionQueryFilters,
-  TransactionListResponse,
-  TransactionSummary,
-} from '@/types/api'
-import { getErrorMessage } from '@/services/api/utils'
+import { 
+  transactionsService,
+  getErrorMessage,
+  type Transaction,
+  type CreateTransactionRequest,
+  type UpdateTransactionRequest,
+  type TransactionFilters as TransactionQueryFilters,
+  type TransactionSummary,
+} from '@/services/api'
 
 interface TransactionsState {
   transactions: Transaction[]
@@ -41,6 +40,14 @@ const initialState: TransactionsState = {
     totalPages: 0,
     totalCount: 0,
   },
+  summary: {
+    totalDebit: 0,
+    totalCredit: 0,
+    netAmount: 0,
+    count: 0,
+    byInstrument: {},
+    bySource: {},
+  },
   filters: {
     page: 1,
     pageSize: 20,
@@ -52,7 +59,7 @@ export const fetchTransactions = createAsyncThunk(
   'transactions/fetchTransactions',
   async (params: TransactionQueryFilters | undefined, { rejectWithValue }) => {
     try {
-      const response = await transactionsService.getTransactions(params)
+      const response = await transactionsService.getAll(params)
       return response
     } catch (error) {
       return rejectWithValue(getErrorMessage(error))
@@ -76,7 +83,7 @@ export const fetchTransaction = createAsyncThunk(
   'transactions/fetchTransaction',
   async (id: string, { rejectWithValue }) => {
     try {
-      const transaction = await transactionsService.getTransaction(id)
+      const transaction = await transactionsService.getById(id)
       return transaction
     } catch (error) {
       return rejectWithValue(getErrorMessage(error))
@@ -88,7 +95,7 @@ export const createTransaction = createAsyncThunk(
   'transactions/createTransaction',
   async (transactionData: CreateTransactionRequest, { rejectWithValue }) => {
     try {
-      const transaction = await transactionsService.createTransaction(transactionData)
+      const transaction = await transactionsService.create(transactionData)
       return transaction
     } catch (error) {
       return rejectWithValue(getErrorMessage(error))
@@ -100,7 +107,7 @@ export const updateTransaction = createAsyncThunk(
   'transactions/updateTransaction',
   async ({ id, data }: { id: string; data: UpdateTransactionRequest }, { rejectWithValue }) => {
     try {
-      const transaction = await transactionsService.updateTransaction(id, data)
+      const transaction = await transactionsService.update(id, data)
       return transaction
     } catch (error) {
       return rejectWithValue(getErrorMessage(error))
@@ -112,7 +119,7 @@ export const deleteTransaction = createAsyncThunk(
   'transactions/deleteTransaction',
   async (id: string, { rejectWithValue }) => {
     try {
-      await transactionsService.deleteTransaction(id)
+      await transactionsService.delete(id)
       return id
     } catch (error) {
       return rejectWithValue(getErrorMessage(error))

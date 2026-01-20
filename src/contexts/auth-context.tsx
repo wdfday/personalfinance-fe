@@ -1,7 +1,7 @@
 "use client"
 
 import { createContext, useContext, useEffect, useState, ReactNode } from "react"
-import { authService, userService } from "@/services/api"
+import { authService, usersService } from "@/services/api"
 import type { User } from "@/services/api"
 import { getErrorMessage } from "@/services/api/utils"
 
@@ -39,11 +39,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const checkAuth = async () => {
       try {
         // Check if token exists
-        if (authService.isAuthenticated()) {
-          // Get current user from User Service (not Auth Service)
-          const currentUser = await userService.getCurrentUser()
-          setUser(currentUser)
-        }
+          if (authService.getToken()) {
+            // Get current user from User Service (not Auth Service)
+            const currentUser = await usersService.getMe()
+            setUser(currentUser)
+          }
       } catch (error) {
         console.error('Auth check failed:', getErrorMessage(error))
         authService.logout()
@@ -59,7 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const response = await authService.login(credentials)
       // Sau khi login thành công, lấy đầy đủ thông tin user từ User Service
-      const fullUser = await userService.getCurrentUser()
+      const fullUser = await usersService.getMe()
       setUser(fullUser)
     } catch (error) {
       console.error('Login failed:', getErrorMessage(error))
@@ -71,7 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const response = await authService.register(userData)
       // Sau khi register thành công, lấy đầy đủ thông tin user từ User Service
-      const fullUser = await userService.getCurrentUser()
+      const fullUser = await usersService.getMe()
       setUser(fullUser)
     } catch (error) {
       console.error('Register failed:', getErrorMessage(error))
@@ -87,7 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const updateProfile = async (data: { full_name?: string; display_name?: string; phone_number?: string }) => {
     try {
       // Dùng User Service thay vì Auth Service
-      const updatedUser = await userService.updateProfile(data)
+      const updatedUser = await usersService.updateProfile(data)
       setUser(updatedUser)
     } catch (error) {
       console.error('Update profile failed:', getErrorMessage(error))

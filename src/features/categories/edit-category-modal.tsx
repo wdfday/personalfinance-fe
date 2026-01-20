@@ -19,7 +19,7 @@ import { useTranslation } from "@/contexts/i18n-context"
 type UpdateCategoryForm = {
   name: string
   type: "income" | "expense" | "both"
-  parent_id?: string | "none"
+  parent_id?: string
   icon: string
   color: string
   is_active: boolean
@@ -63,8 +63,8 @@ export function EditCategoryModal({ isOpen, onClose, category }: EditCategoryMod
       setValue("name", category.name)
       setValue("type", category.type)
       setValue("parent_id", category.parent_id || "none")
-      setValue("icon", category.icon)
-      setValue("color", category.color)
+      setValue("icon", category.icon || "")
+      setValue("color", category.color || "#000000")
       setValue("is_active", category.is_active)
     }
   }, [category, setValue])
@@ -73,7 +73,7 @@ export function EditCategoryModal({ isOpen, onClose, category }: EditCategoryMod
   const isActive = watch("is_active")
 
   const parentCategories = useMemo(() => {
-    return categories.filter(
+    return (categories || []).filter(
       (c) => !c.parent_id && c.type === selectedType && c.id !== category?.id && c.is_active
     )
   }, [categories, selectedType, category])

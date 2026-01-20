@@ -8,7 +8,7 @@ import { ArrowUpRight, ArrowDownRight } from "lucide-react"
 export function RecentTransactions() {
   const { transactions } = useAppSelector((state) => state.transactions)
 
-  const formatCurrency = (amount: number, currency: string = 'USD') => {
+  const formatCurrency = (amount: number, currency: string = 'VND') => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: currency,
@@ -25,7 +25,7 @@ export function RecentTransactions() {
             <div key={transaction.id} className="flex items-center">
               <div className="flex-1">
                 <p className="text-sm font-medium">{transaction.description}</p>
-                <p className="text-xs text-muted-foreground">{new Date(transaction.bookingDate).toLocaleDateString()}</p>
+                <p className="text-xs text-muted-foreground">{transaction.booking_date ? new Date(transaction.booking_date).toLocaleDateString() : 'N/A'}</p>
               </div>
               <div className="flex items-center">
                 <span

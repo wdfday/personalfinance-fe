@@ -21,6 +21,9 @@ import {
   ChevronLeft,
   FileText,
   Link2,
+  Calculator,
+  Calendar,
+  Banknote,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -33,7 +36,9 @@ const navigation = [
   { labelKey: "accounts", href: "/accounts", icon: Wallet },
   { labelKey: "brokers", href: "/brokers", icon: Link2 },
   { labelKey: "transactions", href: "/transactions", icon: Receipt },
+  { labelKey: "income", href: "/income", icon: Banknote },
   { labelKey: "budgets", href: "/budgets", icon: CreditCard },
+  { labelKey: "month", href: "/calendar", icon: Calendar },
   { labelKey: "goals", href: "/goals", icon: Building2 },
   { labelKey: "debts", href: "/debts", icon: FileText },
   { labelKey: "investments", href: "/investments", icon: Folder },
@@ -51,7 +56,7 @@ export function Sidebar() {
   const { t } = useTranslation("sidebar")
   const { t: tCommon } = useTranslation("common")
 
-  const NavItem = ({ item, isBottom = false }) => {
+  const NavItem = ({ item, isBottom = false }: { item: typeof navigation[0], isBottom?: boolean }) => {
     const label = t(`navigation.${item.labelKey}`)
     return (
       <Tooltip delayDuration={0}>

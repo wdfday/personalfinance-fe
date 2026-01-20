@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit'
-import { apiClient, Budget, CreateBudgetRequest } from '@/lib/api'
+import { budgetsService } from '@/services/api'
+import type { Budget, CreateBudgetRequest, UpdateBudgetRequest } from '@/services/api/types/budgets'
 
 interface BudgetsState {
   budgets: Budget[]
@@ -7,6 +8,7 @@ interface BudgetsState {
   isLoading: boolean
   error: string | null
   total: number
+  isInitialized: boolean
 }
 
 const initialState: BudgetsState = {
@@ -15,16 +17,23 @@ const initialState: BudgetsState = {
   isLoading: false,
   error: null,
   total: 0,
+  isInitialized: false,
 }
 
-// Async thunks
 export const fetchBudgets = createAsyncThunk(
   'budgets/fetchBudgets',
   async (_, { rejectWithValue }) => {
     try {
-      const response = await apiClient.getBudgets()
-      return response
+      const response = await budgetsService.getAll()
+      console.log('📊 Budget API response:', response)
+      // API returns { data: [...], total, page, page_size, total_pages }
+      const budgets = (response as unknown as { data: Budget[] }).data || response.items || []
+      return {
+        budgets,
+        total: response.total || budgets.length
+      }
     } catch (error) {
+      console.error('❌ Budget API error:', error)
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to fetch budgets')
     }
   }
@@ -34,7 +43,7 @@ export const fetchBudget = createAsyncThunk(
   'budgets/fetchBudget',
   async (id: string, { rejectWithValue }) => {
     try {
-      const budget = await apiClient.getBudget(id)
+      const budget = await budgetsService.getById(id)
       return budget
     } catch (error) {
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to fetch budget')
@@ -46,7 +55,7 @@ export const createBudget = createAsyncThunk(
   'budgets/createBudget',
   async (budgetData: CreateBudgetRequest, { rejectWithValue }) => {
     try {
-      const budget = await apiClient.createBudget(budgetData)
+      const budget = await budgetsService.create(budgetData)
       return budget
     } catch (error) {
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to create budget')
@@ -56,9 +65,9 @@ export const createBudget = createAsyncThunk(
 
 export const updateBudget = createAsyncThunk(
   'budgets/updateBudget',
-  async ({ id, data }: { id: string; data: Partial<CreateBudgetRequest> }, { rejectWithValue }) => {
+  async ({ id, data }: { id: string; data: Partial<UpdateBudgetRequest> }, { rejectWithValue }) => {
     try {
-      const budget = await apiClient.updateBudget(id, data)
+      const budget = await budgetsService.update(id, data as UpdateBudgetRequest)
       return budget
     } catch (error) {
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to update budget')
@@ -70,7 +79,7 @@ export const deleteBudget = createAsyncThunk(
   'budgets/deleteBudget',
   async (id: string, { rejectWithValue }) => {
     try {
-      await apiClient.deleteBudget(id)
+      await budgetsService.delete(id)
       return id
     } catch (error) {
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to delete budget')
@@ -104,10 +113,12 @@ const budgetsSlice = createSlice({
         state.budgets = action.payload.budgets
         state.total = action.payload.total
         state.error = null
+        state.isInitialized = true
       })
       .addCase(fetchBudgets.rejected, (state, action) => {
         state.isLoading = false
         state.error = action.payload as string
+        state.isInitialized = true
       })
       // Fetch Budget
       .addCase(fetchBudget.pending, (state) => {
@@ -180,5 +191,6 @@ const budgetsSlice = createSlice({
 })
 
 export const { clearError, setSelectedBudget, clearSelectedBudget } = budgetsSlice.actions
+export const selectBudgets = (state: { budgets: BudgetsState }) => state.budgets.budgets
 export default budgetsSlice
 

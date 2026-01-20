@@ -1,13 +1,13 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit'
-import { brokersService } from '@/services/api/brokers.service'
+import { brokersService } from '@/services/api'
 import type {
     BrokerConnection,
-    CreateSSIConnectionRequest,
-    CreateOKXConnectionRequest,
-    CreateSepayConnectionRequest,
-    UpdateBrokerConnectionRequest,
+    CreateSSIBrokerRequest,
+    CreateOKXBrokerRequest,
+    CreateSepayBrokerRequest,
+    UpdateBrokerRequest,
     SyncResult,
-} from '@/services/api/brokers.service'
+} from '@/services/api'
 
 // State interface
 interface BrokersState {
@@ -34,7 +34,7 @@ export const fetchBrokers = createAsyncThunk(
     'brokers/fetchBrokers',
     async (_, { rejectWithValue }) => {
         try {
-            const response = await brokersService.getBrokers()
+            const response = await brokersService.getAll()
             return response.connections || []
         } catch (error: any) {
             return rejectWithValue(error.response?.data?.error || error.message || 'Failed to fetch brokers')
@@ -46,7 +46,7 @@ export const fetchBroker = createAsyncThunk(
     'brokers/fetchBroker',
     async (id: string, { rejectWithValue }) => {
         try {
-            const broker = await brokersService.getBroker(id)
+            const broker = await brokersService.getById(id)
             return broker
         } catch (error: any) {
             return rejectWithValue(error.response?.data?.error || error.message || 'Failed to fetch broker')
@@ -57,7 +57,7 @@ export const fetchBroker = createAsyncThunk(
 // Type-specific create thunks
 export const createSSIBroker = createAsyncThunk(
     'brokers/createSSI',
-    async (data: CreateSSIConnectionRequest, { rejectWithValue }) => {
+    async (data: CreateSSIBrokerRequest, { rejectWithValue }) => {
         try {
             const broker = await brokersService.createSSI(data)
             return broker
@@ -69,7 +69,7 @@ export const createSSIBroker = createAsyncThunk(
 
 export const createOKXBroker = createAsyncThunk(
     'brokers/createOKX',
-    async (data: CreateOKXConnectionRequest, { rejectWithValue }) => {
+    async (data: CreateOKXBrokerRequest, { rejectWithValue }) => {
         try {
             const broker = await brokersService.createOKX(data)
             return broker
@@ -81,7 +81,7 @@ export const createOKXBroker = createAsyncThunk(
 
 export const createSepayBroker = createAsyncThunk(
     'brokers/createSepay',
-    async (data: CreateSepayConnectionRequest, { rejectWithValue }) => {
+    async (data: CreateSepayBrokerRequest, { rejectWithValue }) => {
         try {
             const broker = await brokersService.createSepay(data)
             return broker
@@ -93,9 +93,9 @@ export const createSepayBroker = createAsyncThunk(
 
 export const updateBroker = createAsyncThunk(
     'brokers/updateBroker',
-    async ({ id, data }: { id: string; data: UpdateBrokerConnectionRequest }, { rejectWithValue }) => {
+    async ({ id, data }: { id: string; data: UpdateBrokerRequest }, { rejectWithValue }) => {
         try {
-            const broker = await brokersService.updateBroker(id, data)
+            const broker = await brokersService.update(id, data)
             return broker
         } catch (error: any) {
             return rejectWithValue(error.response?.data?.error || error.message || 'Failed to update broker')
@@ -107,7 +107,7 @@ export const deleteBroker = createAsyncThunk(
     'brokers/deleteBroker',
     async (id: string, { rejectWithValue }) => {
         try {
-            await brokersService.deleteBroker(id)
+            await brokersService.delete(id)
             return id
         } catch (error: any) {
             return rejectWithValue(error.response?.data?.error || error.message || 'Failed to delete broker')
@@ -119,7 +119,7 @@ export const syncBrokerNow = createAsyncThunk(
     'brokers/syncNow',
     async (id: string, { rejectWithValue }) => {
         try {
-            const result = await brokersService.syncNow(id)
+            const result = await brokersService.sync(id)
             return { id, result }
         } catch (error: any) {
             return rejectWithValue(error.response?.data?.error || error.message || 'Failed to sync broker')

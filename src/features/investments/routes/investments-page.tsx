@@ -17,7 +17,7 @@ export default function InvestmentsPage() {
     dispatch(fetchInvestments())
   }, [dispatch])
 
-  const formatCurrency = (amount: number, currency: string = 'USD') => {
+  const formatCurrency = (amount: number, currency: string = 'VND') => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: currency,

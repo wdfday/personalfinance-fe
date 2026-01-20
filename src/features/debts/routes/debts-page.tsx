@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { Plus, Edit, Trash2, Eye, CreditCard, DollarSign } from "lucide-react"
+import { Plus, Edit, Trash2, Eye, CreditCard } from "lucide-react"
 import { CreateDebtModal } from "../create-debt-modal"
 
 export default function DebtsPage() {
@@ -48,12 +48,28 @@ export default function DebtsPage() {
       credit_card: 'Thẻ tín dụng',
       personal_loan: 'Vay cá nhân',
       mortgage: 'Vay thế chấp',
-      auto_loan: 'Vay mua xe',
-      student_loan: 'Vay học phí',
-      medical: 'Nợ y tế',
       other: 'Khác',
     }
     return labels[type] || type
+  }
+
+  const getBehaviorLabel = (behavior: string) => {
+    const labels: Record<string, string> = {
+      revolving: 'Dư nợ giảm dần',
+      installment: 'Trả góp',
+      interest_only: 'Trả lãi',
+    }
+    return labels[behavior] || behavior
+  }
+
+  const getDaysUntilNextPayment = (dateStr?: string) => {
+    if (!dateStr) return 0
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const due = new Date(dateStr)
+    due.setHours(0, 0, 0, 0)
+    const diffTime = due.getTime() - today.getTime()
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24))
   }
 
   if (isLoading) {
@@ -90,7 +106,8 @@ export default function DebtsPage() {
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {debts.map((debt) => {
-          const isOverdue = debt.days_until_next_payment < 0 && debt.status === 'active'
+          const daysUntilNextPayment = getDaysUntilNextPayment(debt.next_payment_date)
+          const isOverdue = daysUntilNextPayment < 0 && debt.status === 'active'
           const isPaidOff = debt.status === 'paid_off' || debt.current_balance <= 0
 
           return (
@@ -117,6 +134,12 @@ export default function DebtsPage() {
                       <span className="text-muted-foreground">Loại nợ</span>
                       <span className="font-medium">{getTypeLabel(debt.type)}</span>
                     </div>
+                    {debt.behavior && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Tính chất</span>
+                        <span className="font-medium">{getBehaviorLabel(debt.behavior)}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Số tiền gốc</span>
                       <span className="font-medium">{formatCurrency(debt.principal_amount, debt.currency)}</span>
@@ -159,8 +182,8 @@ export default function DebtsPage() {
                         <span className="text-muted-foreground">Còn lại</span>
                         <span className={isOverdue ? "text-red-600 font-medium" : ""}>
                           {isOverdue 
-                            ? `${Math.abs(debt.days_until_next_payment)} ngày quá hạn`
-                            : `${debt.days_until_next_payment} ngày`}
+                            ? `${Math.abs(daysUntilNextPayment)} ngày quá hạn`
+                            : `${daysUntilNextPayment} ngày`}
                         </span>
                       </div>
                       {debt.minimum_payment > 0 && (
@@ -212,5 +235,6 @@ export default function DebtsPage() {
     </div>
   )
 }
+
 
 

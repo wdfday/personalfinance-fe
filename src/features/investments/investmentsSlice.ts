@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit'
-import { apiClient, Investment, CreateInvestmentRequest } from '@/lib/api'
+import { investmentsService } from "@/services/api/services/investments.service"
+import { InvestmentAsset as Investment, CreateAssetRequest as CreateInvestmentRequest } from "@/services/api/types/investments"
 
 interface InvestmentsState {
   investments: Investment[]
@@ -22,8 +23,8 @@ export const fetchInvestments = createAsyncThunk(
   'investments/fetchInvestments',
   async (_, { rejectWithValue }) => {
     try {
-      const response = await apiClient.getInvestments()
-      return response
+      const response = await investmentsService.getAssets()
+      return response.assets
     } catch (error) {
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to fetch investments')
     }
@@ -34,7 +35,7 @@ export const fetchInvestment = createAsyncThunk(
   'investments/fetchInvestment',
   async (id: string, { rejectWithValue }) => {
     try {
-      const investment = await apiClient.getInvestment(id)
+      const investment = await investmentsService.getAsset(id)
       return investment
     } catch (error) {
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to fetch investment')
@@ -46,7 +47,7 @@ export const createInvestment = createAsyncThunk(
   'investments/createInvestment',
   async (investmentData: CreateInvestmentRequest, { rejectWithValue }) => {
     try {
-      const investment = await apiClient.createInvestment(investmentData)
+      const investment = await investmentsService.createAsset(investmentData)
       return investment
     } catch (error) {
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to create investment')
@@ -58,7 +59,7 @@ export const updateInvestment = createAsyncThunk(
   'investments/updateInvestment',
   async ({ id, data }: { id: string; data: Partial<CreateInvestmentRequest> }, { rejectWithValue }) => {
     try {
-      const investment = await apiClient.updateInvestment(id, data)
+      const investment = await investmentsService.updateAsset(id, data)
       return investment
     } catch (error) {
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to update investment')
@@ -70,7 +71,7 @@ export const deleteInvestment = createAsyncThunk(
   'investments/deleteInvestment',
   async (id: string, { rejectWithValue }) => {
     try {
-      await apiClient.deleteInvestment(id)
+      await investmentsService.deleteAsset(id)
       return id
     } catch (error) {
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to delete investment')
@@ -101,8 +102,8 @@ const investmentsSlice = createSlice({
       })
       .addCase(fetchInvestments.fulfilled, (state, action) => {
         state.isLoading = false
-        state.investments = action.payload.investments
-        state.total = action.payload.total
+        state.investments = action.payload
+        state.total = action.payload.length
         state.error = null
       })
       .addCase(fetchInvestments.rejected, (state, action) => {

@@ -1,19 +1,21 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { apiClient, Account, CreateAccountRequest, UpdateAccountRequest } from "@/lib/api"
+import { accountsService } from "@/services/api/services/accounts.service"
+import { Account, CreateAccountRequest, UpdateAccountRequest } from "@/services/api/types/accounts"
 
 export function useAccounts() {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [account, setAccount] = useState<Account | null>(null)
 
   const fetchAccounts = async () => {
     try {
       setIsLoading(true)
       setError(null)
-      const response = await apiClient.getAccounts()
-      setAccounts(response.accounts)
+      const response = await accountsService.getAll()
+      setAccounts(response.items)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch accounts')
     } finally {
@@ -23,7 +25,7 @@ export function useAccounts() {
 
   const createAccount = async (accountData: CreateAccountRequest) => {
     try {
-      const newAccount = await apiClient.createAccount(accountData)
+      const newAccount = await accountsService.create(accountData)
       setAccounts(prev => [...prev, newAccount])
       return newAccount
     } catch (err) {
@@ -32,9 +34,9 @@ export function useAccounts() {
     }
   }
 
-  const updateAccount = async (id: number, accountData: UpdateAccountRequest) => {
+  const updateAccount = async (id: string, accountData: UpdateAccountRequest) => {
     try {
-      const updatedAccount = await apiClient.updateAccount(id, accountData)
+      const updatedAccount = await accountsService.update(id, accountData)
       setAccounts(prev => prev.map(account => 
         account.id === id ? updatedAccount : account
       ))
@@ -45,13 +47,26 @@ export function useAccounts() {
     }
   }
 
-  const deleteAccount = async (id: number) => {
+  const deleteAccount = async (id: string) => {
     try {
-      await apiClient.deleteAccount(id)
+      await accountsService.delete(id)
       setAccounts(prev => prev.filter(account => account.id !== id))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete account')
       throw err
+    }
+  }
+
+  const getAccount = async (id: string) => {
+    try {
+      setIsLoading(true)
+      setError(null)
+      const accountData = await accountsService.getById(id)
+      setAccount(accountData)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch account')
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -61,16 +76,18 @@ export function useAccounts() {
 
   return {
     accounts,
+    account,
     isLoading,
     error,
-    refetch: fetchAccounts,
     createAccount,
     updateAccount,
     deleteAccount,
+    getAccount,
+    refreshAccounts: fetchAccounts
   }
 }
 
-export function useAccount(id: number) {
+export function useAccount(id: string) {
   const [account, setAccount] = useState<Account | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -79,8 +96,8 @@ export function useAccount(id: number) {
     try {
       setIsLoading(true)
       setError(null)
-      const accountData = await apiClient.getAccount(id)
-      setAccount(accountData)
+      const data = await accountsService.getById(id)
+      setAccount(data)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch account')
     } finally {

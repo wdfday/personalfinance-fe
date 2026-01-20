@@ -10,12 +10,17 @@ export type BudgetPeriod = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearl
 export type BudgetStatus = 'active' | 'warning' | 'exceeded' | 'paused' | 'expired';
 export type AlertThreshold = '50' | '75' | '90' | '100';
 
-export type GoalType = 'savings' | 'debt' | 'investment' | 'purchase' | 'emergency' | 'retirement' | 'education' | 'other';
-export type GoalStatus = 'active' | 'completed' | 'paused' | 'cancelled' | 'overdue';
+// Goal enums
+export type GoalBehavior = 'flexible' | 'willing' | 'recurring';
+export type GoalCategory = 'savings' | 'debt' | 'investment' | 'purchase' | 'emergency' | 'retirement' | 'education' | 'travel' | 'other';
+/** @deprecated Use GoalCategory instead */
+export type GoalType = GoalCategory;
+export type GoalStatus = 'active' | 'completed' | 'paused' | 'cancelled' | 'overdue' | 'archived';
 export type GoalPriority = 'low' | 'medium' | 'high' | 'critical';
 export type ContributionFrequency = 'one_time' | 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'yearly';
 
-export type DebtType = 'credit_card' | 'loan' | 'mortgage' | 'student_loan' | 'personal_loan' | 'car_loan' | 'other';
+export type DebtType = 'credit_card' | 'personal_loan' | 'mortgage' | 'other';
+export type DebtBehavior = 'revolving' | 'installment' | 'interest_only';
 export type DebtStatus = 'active' | 'paid_off' | 'settled' | 'defaulted' | 'inactive';
 export type PaymentFrequency = 'one_time' | 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'yearly';
 
@@ -25,7 +30,7 @@ export type TransactionInstrument = 'CASH' | 'BANK_ACCOUNT' | 'DEBIT_CARD' | 'CR
 export type TransactionSource = 'BANK_API' | 'CSV_IMPORT' | 'JSON_IMPORT' | 'MANUAL';
 export type TransactionChannel = 'MOBILE_APP' | 'INTERNET_BANKING' | 'ATM' | 'POS' | 'UNKNOWN';
 export type CounterpartyType = 'MERCHANT' | 'PERSON' | 'INTERNAL' | 'UNKNOWN';
-export type TransactionLinkType = 'GOAL' | 'BUDGET' | 'DEBT';
+export type TransactionLinkType = 'GOAL' | 'BUDGET' | 'DEBT' | 'INCOME_PROFILE';
 
 // Legacy types (deprecated - for backward compatibility)
 /** @deprecated Use TransactionDirection instead */
@@ -80,9 +85,13 @@ export interface Budget {
 export interface Goal {
   id: string;
   userId: string;
+  accountId: string;
   name: string;
   description?: string;
-  type: GoalType;
+  behavior: GoalBehavior;
+  category: GoalCategory;
+  /** @deprecated Use category instead */
+  type?: GoalCategory;
   priority: GoalPriority;
   targetAmount: number;
   currentAmount: number;
@@ -98,7 +107,9 @@ export interface Goal {
   autoContribute: boolean;
   autoContributeAmount?: number;
   autoContributeAccountId?: string;
+  /** @deprecated Use accountId instead */
   linkedAccountId?: string;
+  convertedBudgetId?: string;
   enableReminders: boolean;
   reminderFrequency?: string;
   lastReminderSentAt?: string;
@@ -115,6 +126,7 @@ export interface Debt {
   name: string;
   description?: string;
   type: DebtType;
+  behavior: DebtBehavior;
   principal_amount: number;
   current_balance: number;
   currency: string;
@@ -297,6 +309,79 @@ export interface IncomeProfile {
   updated_at: string;
 }
 
+// Budget Constraint types
+export type ConstraintStatus = 'active' | 'pending' | 'ended' | 'archived' | 'paused';
+
+export interface BudgetConstraint {
+  id: string;
+  user_id: string;
+  category_id: string;
+  category_name?: string;
+  period: BudgetPeriod;
+  minimum_amount: number;
+  maximum_amount?: number;
+  is_flexible: boolean;
+  priority: number;
+  description?: string;
+  status: ConstraintStatus;
+  version: number;
+  start_date: string;
+  end_date?: string;
+  archived_at?: string;
+  archived_by?: string;
+  previous_version_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BudgetConstraintListResponse {
+  // Backend can return either format for backward compatibility
+  constraints?: BudgetConstraint[];
+  budget_constraints?: BudgetConstraint[];
+  total?: number;
+  count?: number;
+}
+
+export interface BudgetConstraintSummary {
+  total_mandatory_expenses: number;
+  active_count: number;
+  total_flexible: number;
+  total_fixed: number;
+  count: number;
+  constraints_by_priority?: Record<number, number>;
+}
+
+export interface CreateBudgetConstraintRequest {
+  category_id: string;
+  period?: BudgetPeriod;
+  minimum_amount: number;
+  maximum_amount?: number;
+  is_flexible: boolean;
+  priority?: number;
+  description?: string;
+  start_date: string;
+  end_date?: string;
+}
+
+export interface UpdateBudgetConstraintRequest {
+  category_id?: string;
+  period?: BudgetPeriod;
+  minimum_amount?: number;
+  maximum_amount?: number;
+  is_flexible?: boolean;
+  priority?: number;
+  description?: string;
+  start_date?: string;
+  end_date?: string;
+}
+
+export interface BudgetConstraintFilters extends PaginationParams {
+  status?: ConstraintStatus;
+  category_id?: string;
+  is_flexible?: boolean;
+}
+
+
 // ============================================
 // RESPONSE TYPES
 // ============================================
@@ -345,7 +430,10 @@ export interface GoalTypeSum {
 export interface GoalProgress {
   goalId: string;
   name: string;
-  type: GoalType;
+  behavior: GoalBehavior;
+  category: GoalCategory;
+  /** @deprecated Use category instead */
+  type?: GoalCategory;
   priority: GoalPriority;
   targetAmount: number;
   currentAmount: number;
@@ -422,12 +510,17 @@ export interface UpdateBudgetRequest {
 export interface CreateGoalRequest {
   name: string;
   description?: string;
-  type: GoalType;
+  behavior: GoalBehavior;
+  category: GoalCategory;
+  /** @deprecated Use category instead */
+  type?: GoalCategory;
   priority: GoalPriority;
   targetAmount: number;
+  accountId: string;
   startDate: string;
   targetDate?: string;
   contributionFrequency?: ContributionFrequency;
+  /** @deprecated Use accountId instead */
   linkedAccountId?: string;
   autoContribute?: boolean;
   autoContributeAmount?: number;
@@ -441,12 +534,17 @@ export interface CreateGoalRequest {
 export interface UpdateGoalRequest {
   name?: string;
   description?: string;
-  type?: GoalType;
+  behavior?: GoalBehavior;
+  category?: GoalCategory;
+  /** @deprecated Use category instead */
+  type?: GoalCategory;
   priority?: GoalPriority;
   targetAmount?: number;
+  accountId?: string;
   startDate?: string;
   targetDate?: string;
   contributionFrequency?: ContributionFrequency;
+  /** @deprecated Use accountId instead */
   linkedAccountId?: string;
   autoContribute?: boolean;
   autoContributeAmount?: number;
@@ -462,6 +560,7 @@ export interface CreateDebtRequest {
   name: string;
   description?: string;
   type: DebtType;
+  behavior: DebtBehavior;
   principal_amount: number;
   interest_rate: number;
   minimum_payment: number;
@@ -475,6 +574,7 @@ export interface UpdateDebtRequest {
   name?: string;
   description?: string;
   type?: DebtType;
+  behavior?: DebtBehavior;
   principal_amount?: number;
   interest_rate?: number;
   minimum_payment?: number;

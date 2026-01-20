@@ -4,9 +4,7 @@
  */
 
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit'
-import { profileService } from '@/services/api'
-import type { UserProfile, UpdateUserProfileExtendedRequest } from '@/services/api'
-import { getErrorMessage } from '@/services/api/utils'
+import { profileService, getErrorMessage, UserProfile, UpdateUserProfileRequest as UpdateProfileRequest } from '@/services/api'
 
 interface ProfileState {
   profile: UserProfile | null
@@ -39,7 +37,7 @@ export const fetchProfile = createAsyncThunk(
 
 export const updateProfile = createAsyncThunk(
   'profile/update',
-  async (data: UpdateUserProfileExtendedRequest, { rejectWithValue }) => {
+  async (data: UpdateProfileRequest, { rejectWithValue }) => {
     try {
       const updatedProfile = await profileService.updateProfile(data)
       return updatedProfile

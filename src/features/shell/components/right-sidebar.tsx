@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
-import { chatService } from "@/services/api/chat.service"
+import { chatService } from "@/services/api"
 import type { ChatUIMessage } from "@/types/chat"
 
 interface RightSidebarProps {

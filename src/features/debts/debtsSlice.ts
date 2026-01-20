@@ -1,7 +1,22 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit'
-import { debtsService, Debt, CreateDebtRequest, UpdateDebtRequest, AddPaymentRequest } from '@/services/api'
+import { debtsService } from '@/services/api'
+import type { Debt, CreateDebtRequest, UpdateDebtRequest, AddDebtPaymentRequest } from '@/services/api'
 
 interface DebtsState {
+  debts: Debt[]
+  selectedDebt: Debt | null
+  // ...
+  // Note: I cannot use replacement content effectively if I need to change widely separated lines.
+  // I will split this into multiple chunks in replace_file_content or call the tool multiple times?
+  // replace_file_content supports single contiguous block.
+  // Wait, I can use MultiReplaceFileContent? Yes, I have `multi_replace_file_content` available?
+  // The system prompt says: "To edit multiple, non-adjacent lines of code in the same file, make a single call to the multi_replace_file_content tool."
+  // I will use `multi_replace_file_content`.
+  // Wait, I don't see `multi_replace_file_content` in my provided tools list at the top.
+  // Let me check my tools.
+  // I see `replace_file_content` and "Use this tool ONLY when you are making a SINGLE CONTIGUOUS block...".
+  // I see `multi_replace_file_content` in the list!
+  // I will use `multi_replace_file_content` for debtsSlice.
   debts: Debt[]
   selectedDebt: Debt | null
   isLoading: boolean
@@ -22,7 +37,7 @@ export const fetchDebts = createAsyncThunk(
   'debts/fetchDebts',
   async (_, { rejectWithValue }) => {
     try {
-      const response = await debtsService.getDebts()
+      const response = await debtsService.getAll()
       return response
     } catch (error) {
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to fetch debts')
@@ -34,7 +49,7 @@ export const fetchDebt = createAsyncThunk(
   'debts/fetchDebt',
   async (id: string, { rejectWithValue }) => {
     try {
-      const debt = await debtsService.getDebt(id)
+      const debt = await debtsService.getById(id)
       return debt
     } catch (error) {
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to fetch debt')
@@ -46,7 +61,7 @@ export const createDebt = createAsyncThunk(
   'debts/createDebt',
   async (debtData: CreateDebtRequest, { rejectWithValue }) => {
     try {
-      const debt = await debtsService.createDebt(debtData)
+      const debt = await debtsService.create(debtData)
       return debt
     } catch (error) {
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to create debt')
@@ -58,7 +73,7 @@ export const updateDebt = createAsyncThunk(
   'debts/updateDebt',
   async ({ id, data }: { id: string; data: UpdateDebtRequest }, { rejectWithValue }) => {
     try {
-      const debt = await debtsService.updateDebt(id, data)
+      const debt = await debtsService.update(id, data)
       return debt
     } catch (error) {
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to update debt')
@@ -70,7 +85,7 @@ export const deleteDebt = createAsyncThunk(
   'debts/deleteDebt',
   async (id: string, { rejectWithValue }) => {
     try {
-      await debtsService.deleteDebt(id)
+      await debtsService.delete(id)
       return id
     } catch (error) {
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to delete debt')
@@ -80,9 +95,9 @@ export const deleteDebt = createAsyncThunk(
 
 export const addPayment = createAsyncThunk(
   'debts/addPayment',
-  async ({ id, data }: { id: string; data: AddPaymentRequest }, { rejectWithValue }) => {
+  async ({ id, data }: { id: string; data: AddDebtPaymentRequest }, { rejectWithValue }) => {
     try {
-      const debt = await debtsService.addPayment(id, data)
+      const debt = await debtsService.makePayment(id, data.amount)
       return debt
     } catch (error) {
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to add payment')
@@ -245,5 +260,6 @@ const debtsSlice = createSlice({
 
 export const { clearError, setSelectedDebt, clearSelectedDebt } = debtsSlice.actions
 export default debtsSlice
+
 
 

@@ -1,6 +1,6 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit'
-import { goalsService, GoalListResponse } from '@/services/api/goals.service'
-import type { Goal, CreateGoalRequest, UpdateGoalRequest } from '@/types/api'
+import { goalsService } from '@/services/api/services/goals.service'
+import type { Goal, CreateGoalRequest, UpdateGoalRequest } from '@/services/api/types/goals'
 
 interface GoalsState {
   goals: Goal[]
@@ -23,8 +23,10 @@ export const fetchGoals = createAsyncThunk(
   'goals/fetchGoals',
   async (_, { rejectWithValue }) => {
     try {
-      const response = await goalsService.getGoals()
-      return { goals: response.items, total: response.total }
+      const response = await goalsService.getAll()
+      // Backend returns an array of goals directly, not { items, total }
+      const goals = Array.isArray(response) ? response : []
+      return { goals, total: goals.length }
     } catch (error) {
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to fetch goals')
     }
@@ -35,7 +37,7 @@ export const fetchGoal = createAsyncThunk(
   'goals/fetchGoal',
   async (id: string, { rejectWithValue }) => {
     try {
-      const goal = await goalsService.getGoal(id)
+      const goal = await goalsService.getById(id)
       return goal
     } catch (error) {
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to fetch goal')
@@ -47,7 +49,7 @@ export const createGoal = createAsyncThunk(
   'goals/createGoal',
   async (goalData: CreateGoalRequest, { rejectWithValue }) => {
     try {
-      const goal = await goalsService.createGoal(goalData)
+      const goal = await goalsService.create(goalData)
       return goal
     } catch (error) {
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to create goal')
@@ -59,7 +61,7 @@ export const updateGoal = createAsyncThunk(
   'goals/updateGoal',
   async ({ id, data }: { id: string; data: UpdateGoalRequest }, { rejectWithValue }) => {
     try {
-      const goal = await goalsService.updateGoal(id, data)
+      const goal = await goalsService.update(id, data)
       return goal
     } catch (error) {
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to update goal')
@@ -71,10 +73,34 @@ export const deleteGoal = createAsyncThunk(
   'goals/deleteGoal',
   async (id: string, { rejectWithValue }) => {
     try {
-      await goalsService.deleteGoal(id)
+      await goalsService.delete(id)
       return id
     } catch (error) {
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to delete goal')
+    }
+  }
+)
+
+export const archiveGoal = createAsyncThunk(
+  'goals/archiveGoal',
+  async (id: string, { rejectWithValue }) => {
+    try {
+      await goalsService.archive(id)
+      return id
+    } catch (error) {
+      return rejectWithValue(error instanceof Error ? error.message : 'Failed to archive goal')
+    }
+  }
+)
+
+export const unarchiveGoal = createAsyncThunk(
+  'goals/unarchiveGoal',
+  async (id: string, { rejectWithValue }) => {
+    try {
+      await goalsService.unarchive(id)
+      return id
+    } catch (error) {
+      return rejectWithValue(error instanceof Error ? error.message : 'Failed to unarchive goal')
     }
   }
 )
@@ -174,6 +200,39 @@ const goalsSlice = createSlice({
         state.error = null
       })
       .addCase(deleteGoal.rejected, (state, action) => {
+        state.isLoading = false
+        state.error = action.payload as string
+      })
+      // Archive Goal
+      .addCase(archiveGoal.pending, (state) => {
+        state.isLoading = true
+        state.error = null
+      })
+      .addCase(archiveGoal.fulfilled, (state, action) => {
+        state.isLoading = false
+        // Remove from active goals list
+        state.goals = state.goals.filter(goal => goal.id !== action.payload)
+        state.total -= 1
+        if (state.selectedGoal?.id === action.payload) {
+          state.selectedGoal = null
+        }
+        state.error = null
+      })
+      .addCase(archiveGoal.rejected, (state, action) => {
+        state.isLoading = false
+        state.error = action.payload as string
+      })
+      // Unarchive Goal
+      .addCase(unarchiveGoal.pending, (state) => {
+        state.isLoading = true
+        state.error = null
+      })
+      .addCase(unarchiveGoal.fulfilled, (state, action) => {
+        state.isLoading = false
+        // Will be refetched when user refreshes
+        state.error = null
+      })
+      .addCase(unarchiveGoal.rejected, (state, action) => {
         state.isLoading = false
         state.error = action.payload as string
       })

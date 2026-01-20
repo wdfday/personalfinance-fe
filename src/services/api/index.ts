@@ -1,221 +1,200 @@
-/**
- * API Services Index
- * Export tất cả services để sử dụng trong ứng dụng
- * Synced with backend API - 2024-12-17
- */
+// API Index - Re-exports all services and types
 
-// Export base client
-export { baseApiClient } from './base'
-export type { ApiError, ApiResponse } from './base'
+// Client
+export { apiClient } from './client'
+export { getErrorMessage } from './utils'
 
-// Import all services first
-import { authService } from './auth.service'
-import { userService } from './user.service'
-import { profileService } from './profile.service'
-import { accountsService } from './accounts.service'
-import { transactionsService } from './transactions.service'
-import { budgetsService } from './budgets.service'
-import { goalsService } from './goals.service'
-import { debtsService } from './debts.service'
-import { investmentsService } from './investments.service'
-import { categoriesService } from './categories.service'
-import { summariesService } from './summaries.service'
-import { calendarService } from './calendar.service'
-import { chatService } from './chat.service'
-import { brokersService } from './brokers.service'
+// Services
+export { authService } from './services/auth.service'
+export { accountsService } from './services/accounts.service'
+export { categoriesService } from './services/categories.service'
+export { transactionsService } from './services/transactions.service'
+export { budgetsService } from './services/budgets.service'
+export { budgetConstraintsService } from './services/budget-constraints.service'
+export { goalsService } from './services/goals.service'
+export { incomeProfilesService } from './services/income-profiles.service'
+export { debtsService } from './services/debts.service'
+export { usersService } from './services/users.service'
+export { brokersService } from './services/brokers.service'
+export { investmentsService } from './services/investments.service'
+export { calendarService } from './services/calendar.service'
+export { chatService } from './services/chat.service'
+export { notificationsService } from './services/notifications.service'
+export { budgetAllocationService } from './services/budget-allocation.service'
+export { goalPrioritizationService } from './services/goal-prioritization.service'
+export { monthService } from './services/month.service'
+export { profileService } from './services/profile.service' // Backward compatibility
 
-// Export auth service
-export { authService }
-export type {
-  UserAuthInfo,
-  RegisterRequest,
-  LoginRequest,
-  AuthResponse,
-  TokenInfo,
-  GoogleAuthRequest,
-} from './auth.service'
+// Types - Auth
+export type { User, TokenInfo, AuthResponse, LoginRequest, RegisterRequest } from './types/auth'
 
-// Export user service
-export { userService }
-export type {
-  User,
-  UpdateUserProfileRequest,
-  ChangePasswordRequest,
-} from './user.service'
-
-// Export profile service  
-export { profileService }
-export type {
-  UserProfile,
-  UpdateProfileRequest as UpdateUserProfileExtendedRequest,
-  CreateProfileRequest,
-} from './profile.service'
-
-// Export accounts service
-export { accountsService }
+// Types - Accounts
 export type {
   Account,
   AccountType,
+  SyncStatus,
   CreateAccountRequest,
   UpdateAccountRequest,
-  AccountListResponse,
-  InstitutionName,
-  DebitCreditInstitution,
-  InvestmentInstitution,
-  CryptoInstitution,
-} from './accounts.service'
+  AccountsListResponse,
+} from './types/accounts'
 
-// Export brokers service
-export { brokersService }
-export type {
-  BrokerConnection,
-  BrokerType,
-  BrokerConnectionStatus,
-  CreateBrokerConnectionRequest,
-  UpdateBrokerConnectionRequest,
-  BrokerListResponse,
-  SyncResult,
-} from './brokers.service'
-
-// Export transactions service
-export { transactionsService }
-export type {
-  Transaction,
-  CreateTransactionRequest,
-  UpdateTransactionRequest,
-  TransactionListResponse,
-  TransactionQueryParams,
-} from './transactions.service'
-
-// Export budgets service
-export { budgetsService }
-export type {
-  Budget,
-  CreateBudgetRequest,
-  UpdateBudgetRequest,
-  BudgetListResponse,
-  BudgetSummary,
-} from './budgets.service'
-
-// Export goals service
-export { goalsService }
-export type {
-  Goal,
-  CreateGoalRequest,
-  UpdateGoalRequest,
-  GoalListResponse,
-  GoalSummary,
-  GoalProgress,
-} from './goals.service'
-
-// Export debts service
-export { debtsService }
-export type {
-  Debt,
-  CreateDebtRequest,
-  UpdateDebtRequest,
-  AddDebtPaymentRequest,
-  DebtListResponse,
-  DebtSummary,
-} from './debts.service'
-
-// Export investments service
-export { investmentsService }
-export type {
-  Investment,
-  CreateInvestmentRequest,
-  UpdateInvestmentRequest,
-  InvestmentListResponse,
-  InvestmentSummary,
-} from './investments.service'
-
-// Export categories service
-export { categoriesService }
+// Types - Categories
 export type {
   Category,
+  CategoryType,
   CreateCategoryRequest,
   UpdateCategoryRequest,
   CategoryListResponse,
-} from './categories.service'
+} from './types/categories'
 
-// Export summaries service
-export { summariesService }
+// Types - Transactions
 export type {
-  AccountSummary,
+  Transaction,
+  TransactionType,
+  TransactionStatus,
+  CreateTransactionRequest,
+  UpdateTransactionRequest,
+  TransactionListResponse,
+  TransactionFilters,
   TransactionSummary,
-  BudgetSummary as BudgetSummaryResponse,
-  GoalSummary as GoalSummaryResponse,
-  InvestmentSummary as InvestmentSummaryResponse,
-  DashboardSummary,
-  TransactionSummaryParams,
-} from './summaries.service'
+  InstrumentSummary,
+  SourceSummary,
+} from './types/transactions'
 
-// Export calendar service
-export { calendarService }
+// Types - Budgets
+export type {
+  Budget,
+  BudgetPeriod,
+  BudgetStatus,
+  AlertThreshold,
+  CreateBudgetRequest,
+  UpdateBudgetRequest,
+  BudgetFilters,
+  BudgetListResponse,
+  BudgetSummary,
+} from './types/budgets'
+
+// Types - Budget Constraints
+export type {
+  BudgetConstraint,
+  ConstraintStatus,
+  CreateBudgetConstraintRequest,
+  UpdateBudgetConstraintRequest,
+  BudgetConstraintListResponse,
+  BudgetConstraintSummary,
+  BudgetConstraintFilters,
+} from './types/budget-constraints'
+
+// Types - Goals
+export type {
+  Goal,
+  GoalBehavior,
+  GoalCategory,
+  GoalPriority,
+  GoalStatus,
+  CreateGoalRequest,
+  UpdateGoalRequest,
+} from './types/goals'
+
+// Types - Income Profiles
+export type {
+  IncomeProfile,
+  IncomeStatus,
+  DSSMetadata,
+  CreateIncomeProfileRequest,
+  UpdateIncomeProfileRequest,
+  IncomeProfileListResponse,
+  IncomeSummary,
+} from './types/income-profiles'
+
+// Types - Debts
+export type {
+  Debt,
+  DebtType,
+  DebtStatus,
+  CreateDebtRequest,
+  UpdateDebtRequest,
+  DebtSummary,
+  AddDebtPaymentRequest,
+} from './types/debts'
+
+// Types - Users
+export type {
+  UserProfile,
+  UserStatus,
+  UpdateUserProfileRequest,
+} from './types/users'
+
+// Types - Brokers
+export type {
+  BrokerConnection,
+  BrokerType,
+  BrokerStatus,
+  CreateSSIBrokerRequest,
+  CreateOKXBrokerRequest,
+  CreateSepayBrokerRequest,
+  UpdateBrokerRequest,
+  SyncResult,
+} from './types/brokers'
+
+// Types - Investments
+export type {
+  InvestmentAsset,
+  PortfolioSummary,
+  PortfolioSnapshot,
+  CreateAssetRequest,
+  UpdateAssetRequest,
+  TransactionResponse as InvestmentTransactionResponse
+} from './types/investments'
+
+// Types - Calendar
 export type {
   CalendarEvent,
-  CreateEventRequest as CreateCalendarEventRequest,
-  UpdateEventRequest as UpdateCalendarEventRequest,
-  EventType,
-  EventSource,
-  RecurrenceType,
-  CalendarEventsResponse,
-  CalendarQueryParams,
-  UpcomingEventsParams,
-  GenerateHolidaysRequest,
-} from './calendar.service'
+  CreateEventRequest,
+  UpdateEventRequest,
+  EventListResponse
+} from './types/calendar'
 
-// Export chat service
-export { chatService }
+// Types - Chat
 export type {
+  ChatMessage,
+  Conversation,
   ChatRequest,
   ChatResponse,
-  Conversation,
   ConversationListResponse,
-  ConversationDetailResponse,
-  CreateConversationRequest,
-  ListConversationsParams,
-  StreamEvent,
-  ChatMessage,
-  ChatUIMessage,
-  ChatUIState,
-} from '@/types/chat'
+  ConversationDetailResponse
+} from './types/chat'
 
-// Re-export tất cả services dưới dạng object
-export const apiServices = {
-  auth: authService,
-  user: userService,
-  profile: profileService,
-  accounts: accountsService,
-  transactions: transactionsService,
-  budgets: budgetsService,
-  goals: goalsService,
-  debts: debtsService,
-  investments: investmentsService,
-  categories: categoriesService,
-  summaries: summariesService,
-  calendar: calendarService,
-  chat: chatService,
-  brokers: brokersService,
-}
+// Types - Notifications
+export type {
+  Notification,
+  NotificationListResponse,
+  NotificationStats,
+  NotificationPreference,
+  AlertRule
+} from './types/notifications'
 
-// Default export
-export default apiServices
+// Types - Analytics
+export type {
+  BudgetAllocationModelInput,
+  GenerateAllocationRequest,
+  ExecuteAllocationRequest,
+  BudgetAllocationModelOutput,
+  AllocationScenario,
+  SensitivityAnalysisResult
+} from './types/budget-allocation'
 
-/**
- * Usage examples:
- * 
- * // Import individual service
- * import { authService } from '@/services/api'
- * await authService.login({ email: 'john@example.com', password: '123' })
- * 
- * // Import all services
- * import { apiServices } from '@/services/api'
- * await apiServices.auth.login({ email: 'john@example.com', password: '123' })
- * 
- * // Import types
- * import type { User, Account, Transaction } from '@/services/api'
- * 
- * // Import from centralized types
- * import type { Budget, Goal, Debt } from '@/types/api'
- */
+export type {
+  GoalForRating,
+  DirectRatingInput,
+  AHPOutput
+} from './types/goal-prioritization'
+
+export type {
+  MonthViewResponse,
+  CreateMonthRequest,
+  AssignCategoryRequest,
+  MoveMoneyRequest,
+  PlanningIterationResponse,
+  RecalculatePlanningRequest
+} from './types/month'
