@@ -61,7 +61,7 @@ const budgetAllocationSlice = createSlice({
             state.selectedScenario = null
             state.error = null
         },
-        selectScenario: (state, action: PayloadAction<'conservative' | 'balanced' | 'aggressive'>) => {
+        selectScenario: (state, action: PayloadAction<'safe' | 'balanced'>) => {
             if (state.result) {
                 state.selectedScenario = state.result.scenarios.find(s => s.type === action.payload) || null
             }

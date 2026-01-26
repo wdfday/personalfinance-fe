@@ -86,7 +86,11 @@ class ApiClient {
         }
 
         const message = error.response?.data?.error || error.response?.data?.message || error.message || 'Unknown error'
-        return Promise.reject(new Error(message))
+        // Preserve status code and original error for proper error handling
+        const enhancedError: any = new Error(message)
+        enhancedError.response = error.response
+        enhancedError.status = error.response?.status
+        return Promise.reject(enhancedError)
       }
     )
   }

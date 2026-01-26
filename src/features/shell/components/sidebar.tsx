@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
@@ -13,15 +13,12 @@ import {
   CreditCard,
   Users2,
   Shield,
-  MessagesSquare,
-  Video,
   Settings,
   HelpCircle,
   Menu,
   ChevronLeft,
   FileText,
   Link2,
-  Calculator,
   Calendar,
   Banknote,
 } from "lucide-react"
@@ -29,10 +26,11 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip"
 import { useTranslation } from "@/contexts/i18n-context"
+import { useAuth } from "@/contexts/auth-context"
 
-const navigation = [
+const allNavigation = [
   { labelKey: "dashboard", href: "/", icon: Home },
-  { labelKey: "analytics", href: "/analytics", icon: BarChart2 },
+  { labelKey: "analytics", href: "/analytics", icon: BarChart2, adminOnly: true },
   { labelKey: "accounts", href: "/accounts", icon: Wallet },
   { labelKey: "brokers", href: "/brokers", icon: Link2 },
   { labelKey: "transactions", href: "/transactions", icon: Receipt },
@@ -55,8 +53,16 @@ export function Sidebar() {
   const [isMobileOpen, setIsMobileOpen] = useState(false)
   const { t } = useTranslation("sidebar")
   const { t: tCommon } = useTranslation("common")
+  const { user } = useAuth()
 
-  const NavItem = ({ item, isBottom = false }: { item: typeof navigation[0], isBottom?: boolean }) => {
+  const isAdmin = user?.role === "admin"
+  const navigation = useMemo(
+    () =>
+      allNavigation.filter((item) => !("adminOnly" in item && item.adminOnly) || isAdmin),
+    [isAdmin]
+  )
+
+  const NavItem = ({ item, isBottom = false }: { item: (typeof allNavigation)[0]; isBottom?: boolean }) => {
     const label = t(`navigation.${item.labelKey}`)
     return (
       <Tooltip delayDuration={0}>

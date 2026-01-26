@@ -12,6 +12,28 @@ export const budgetsService = {
     return apiClient.get<Budget>(`/budgets/${id}`)
   },
 
+  async getActive(): Promise<BudgetListResponse> {
+    // Backend trả về array trực tiếp, cần wrap thành BudgetListResponse format
+    const response = await apiClient.get<Budget[]>(`/budgets/active`)
+    // Response có thể là array hoặc đã được unwrap
+    const budgets = Array.isArray(response) ? response : (response as any).budgets || []
+    return {
+      budgets,
+      total: budgets.length
+    }
+  },
+
+  async getByConstraintId(constraintId: string): Promise<BudgetListResponse> {
+    // Backend trả về array trực tiếp, cần wrap thành BudgetListResponse format
+    const response = await apiClient.get<Budget[]>(`/budgets/constraint/${constraintId}`)
+    // Response có thể là array hoặc đã được unwrap
+    const budgets = Array.isArray(response) ? response : (response as any).budgets || []
+    return {
+      budgets,
+      total: budgets.length
+    }
+  },
+
   async create(data: CreateBudgetRequest): Promise<Budget> {
     return apiClient.post<Budget>('/budgets', data)
   },

@@ -7,7 +7,7 @@
 // ============================================
 
 export type BudgetPeriod = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'custom';
-export type BudgetStatus = 'active' | 'warning' | 'exceeded' | 'paused' | 'expired';
+export type BudgetStatus = 'active' | 'warning' | 'exceeded' | 'paused' | 'expired' | 'ended';
 export type AlertThreshold = '50' | '75' | '90' | '100';
 
 // Goal enums
@@ -159,6 +159,7 @@ export interface Transaction {
   id: string;
   userId: string;
   accountId: string;
+  categoryId?: string; // Direct category ID field
 
   // Direction-based classification
   direction: TransactionDirection;
@@ -184,12 +185,15 @@ export interface Transaction {
   // Description
   description?: string;
   userNote?: string;
-  reference?: string;
+  reference?: string; // Reference code from bank/wallet/external system
+
+  // User-selected category (FK to categories table)
+  userCategoryId?: string;
 
   // Counterparty
   counterparty?: TransactionCounterparty;
 
-  // Classification
+  // Classification (deprecated, use userCategoryId instead)
   classification?: TransactionClassification;
 
   // Links to other entities
@@ -207,11 +211,7 @@ export interface TransactionCounterparty {
 }
 
 export interface TransactionClassification {
-  systemCategory?: string;
-  userCategoryId?: string;
-  isTransfer?: boolean;
-  isRefund?: boolean;
-  tags?: string[];
+  userCategoryId?: string; // Deprecated, use Transaction.userCategoryId instead
 }
 
 export interface TransactionLink {
@@ -295,7 +295,6 @@ export interface IncomeProfile {
   start_date: string;
   end_date?: string;
   is_active: boolean;
-  is_verified: boolean;
   verified_at?: string;
   source_name?: string;
   account_id?: string;

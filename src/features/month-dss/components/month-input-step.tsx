@@ -10,6 +10,7 @@ import type { BudgetConstraint } from "@/services/api/types/budget-constraints"
 import type { Goal } from "@/services/api/types/goals"
 import type { Debt } from "@/services/api/types/debts"
 import { ConstraintRow } from "./constraint-row"
+import { useAppSelector } from "@/lib/hooks"
 
 interface MonthInputStepProps {
   income: number
@@ -26,7 +27,8 @@ interface MonthInputStepProps {
   selectedDebtIds: string[]
   setSelectedDebtIds: (ids: string[]) => void
   
-  onNext: () => void
+  // Cho phép async để chờ Initialize DSS xong rồi mới chuyển bước
+  onNext: () => void | Promise<void>
   onConstraintsChanged?: (constraints: BudgetConstraint[]) => void
 }
 
@@ -50,6 +52,52 @@ export function MonthInputStep(props: MonthInputStepProps) {
   const [constraints, setConstraints] = useState<BudgetConstraint[]>(initialConstraints)
   const [editingConstraintId, setEditingConstraintId] = useState<string | null>(null)
 
+  // Categories from Redux (for constraint category dropdown)
+  const { categories } = useAppSelector((state) => state.categories)
+
+  // Auto-ensure a default "Buffer" constraint (5–10% thu nhập) – NOT selected by default
+  useEffect(() => {
+    if (!categories || categories.length === 0) return
+
+    // Category được seeder tạo ra: "Budget Buffer" dưới "Buffer & Misc"
+    const bufferCategory = categories.find(
+      (c) => c.type === 'expense' && c.is_active && c.name === 'Budget Buffer'
+    )
+    if (!bufferCategory) return
+
+    setConstraints(prev => {
+      const existed = prev.some(c => c.category_id === bufferCategory.id)
+      if (existed) return prev
+
+      const now = new Date()
+      const period = now.toISOString().slice(0, 7)
+
+      const bufferConstraint: BudgetConstraint = {
+        id: `buffer-${bufferCategory.id}`,
+        user_id: 'current',
+        category_id: bufferCategory.id,
+        category_name: bufferCategory.name,
+        description: 'Automatic buffer (5–10% of monthly income) for unexpected expenses',
+        minimum_amount: 0,
+        // Sử dụng 10% thu nhập làm trần, sàn = 0 → chỉ dùng khi thừa
+        maximum_amount: Math.max(0, Math.round((income || 0) * 0.10)),
+        is_flexible: true,
+        // Priority thấp (ít quan trọng) để luôn là khoản hi sinh đầu tiên
+        priority: 9,
+        period,
+        start_date: now.toISOString(),
+        status: 'active',
+        is_recurring: true,
+        is_active: true,
+        is_archived: false,
+        created_at: now.toISOString(),
+        updated_at: now.toISOString(),
+      }
+
+      return [...prev, bufferConstraint]
+    })
+  }, [categories, income])
+
   // Notify parent of changes
   useEffect(() => {
     if (onConstraintsChanged) {
@@ -62,14 +110,19 @@ export function MonthInputStep(props: MonthInputStepProps) {
     .filter(c => selectedConstraintIds.includes(c.id))
     .reduce((sum, c) => sum + (Number(c.minimum_amount) || 0), 0)
 
-  // For goals, estimate monthly contribution (target remaining / months to deadline, or ~10%/year as default)
+  // For goals, estimate monthly contribution = remaining-amount / số tháng còn lại đến deadline
   const totalGoals = goals
     .filter(g => selectedGoalIds.includes(g.id))
     .reduce((sum, g) => {
       const remaining = (Number(g.targetAmount) || 0) - (Number(g.currentAmount) || 0)
-      // Estimate: if no deadline, assume 1-year savings plan = remaining/12
-      // Otherwise this is DISPLAY only, real calculation happens in DSS
-      const monthlyEstimate = remaining / 12 // Simple estimate
+      if (!g.targetDate || remaining <= 0) return sum
+      
+      const now = new Date()
+      const deadline = new Date(g.targetDate)
+      const monthsRemaining = Math.max(1, Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24 * 30.44)))
+      
+      // Estimate: remaining-amount / số tháng còn lại
+      const monthlyEstimate = remaining / monthsRemaining
       return sum + monthlyEstimate
     }, 0)
 
@@ -108,11 +161,12 @@ export function MonthInputStep(props: MonthInputStepProps) {
 
   // Constraint CRUD handlers (LOCAL only)
   const handleAddConstraint = () => {
+    const defaultCategory = categories?.find((c) => c.type === 'expense' && c.is_active)
     const newConstraint: BudgetConstraint = {
       id: `temp-${Date.now()}`,
       user_id: 'current',
-      category_id: '',
-      category_name: 'New Expense',
+      category_id: defaultCategory?.id || '',
+      category_name: defaultCategory?.name || 'New Expense',
       description: 'New expense item',
       minimum_amount: 0,
       maximum_amount: 0,
@@ -122,7 +176,8 @@ export function MonthInputStep(props: MonthInputStepProps) {
       start_date: new Date().toISOString(),
       status: 'active',
       is_recurring: false,
-      frequency: 'monthly',
+      is_active: true,
+      is_archived: false,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }
@@ -284,6 +339,7 @@ export function MonthInputStep(props: MonthInputStepProps) {
                                 <ConstraintRow
                                   key={c.id}
                                   constraint={c}
+                                  categories={categories || []}
                                   isSelected={selectedConstraintIds.includes(c.id)}
                                   isEditing={editingConstraintId === c.id}
                                   onToggle={() => toggleConstraint(c.id)}
@@ -374,6 +430,7 @@ export function MonthInputStep(props: MonthInputStepProps) {
                                              const deadline = new Date(g.targetDate)
                                              const monthsRemaining = Math.max(1, Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24 * 30.44)))
                                              
+                                             // remaining-amount / số tháng còn lại
                                              return formatCurrency(remaining / monthsRemaining)
                                            })()}
                                        </span>

@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
-import { ArrowRight, Target, TrendingUp, CheckCircle2 } from "lucide-react"
+import { ArrowLeft, ArrowRight, Target, TrendingUp, CheckCircle2 } from "lucide-react"
 
 interface Goal {
   id: string
@@ -23,80 +23,125 @@ interface Problem1Props {
   monthId: string
   monthStr: string
   onNext: () => void
+  onBack: () => void
 }
 
-export function Problem1GoalsPage({ goals, monthId, monthStr, onNext }: Problem1Props) {
+export function Problem1GoalsPage({ goals, monthId, monthStr, onNext, onBack }: Problem1Props) {
   const dispatch = useAppDispatch()
   const { goalPrioritization, autoScoring } = useAppSelector(state => state.dssWorkflow)
   const hasRunRef = useRef(false)
+  const lastWeightsKeyRef = useRef<string>('')
   
   const activeGoals = useMemo(() => goals.filter(g => g.status === 'active'), [goals])
 
-  // DEBUG
-  console.log('🔍 Problem1 State:', {
-    loading: goalPrioritization.loading,
-    hasPreview: !!goalPrioritization.preview,
-    preview: goalPrioritization.preview,
-    error: goalPrioritization.error,
-  })
+  // Build stable key from customWeights to detect real changes (avoid object reference churn)
+  // NOTE: Impact is temporarily disabled
+  const customWeights = autoScoring.customWeights
+  const weightsKey = customWeights
+    ? `${customWeights.feasibility}|${customWeights.importance}|${customWeights.urgency}`
+    : ''
 
-  // Auto-run preview on mount
+  // Auto-run preview: only on mount (no preview yet) OR when weights actually changed. Avoid loop after apply/continue.
   useEffect(() => {
-    if (
-      activeGoals.length > 0 && 
-      !goalPrioritization.preview && 
-      !goalPrioritization.loading &&
-      !hasRunRef.current
-    ) {
-      console.log('🚀 Auto-running goal prioritization preview...')
-      hasRunRef.current = true
-      
-      // Convert custom weights (0-1) to criteria ratings (1-10)
-      const customWeights = autoScoring.customWeights
-      const criteriaRatings = customWeights ? {
-        feasibility: Math.round(customWeights.feasibility * 10),
-        impact: Math.round(customWeights.impact * 10),
-        importance: Math.round(customWeights.importance * 10),
-        urgency: Math.round(customWeights.urgency * 10),
-      } : undefined
-      
-      console.log('📊 Sending criteria ratings:', criteriaRatings)
-      
-      dispatch(previewGoalPrioritization({
-        monthStr,
-        data: {
-          month_id: monthId,
-          criteria_ratings: criteriaRatings, // Pass custom weights from Step 0
-          goals: activeGoals.map(g => {
-            // Use auto-scoring results if available
-            const autoScore = autoScoring.results?.goals.find(r => r.goal_id === g.id)
-            
-            return {
-              id: g.id, // Backend expects 'id', not 'goal_id'
-              name: g.name,
-              target_amount: g.targetAmount,
-              current_amount: g.currentAmount,
-              target_date: g.targetDate || new Date().toISOString(),
-              type: g.category || 'other',
-              priority: g.priority,
-              // Include auto-scoring if available
-              ...(autoScore && {
-                feasibility_score: autoScore.scores.feasibility.score,
-                impact_score: autoScore.scores.impact.score,
-                importance_score: autoScore.scores.importance.score,
-                urgency_score: autoScore.scores.urgency.score,
-              })
-            }
-          })
-        }
-      }))
-    }
-  }, [activeGoals.length, dispatch, monthId, monthStr, goalPrioritization.loading, goalPrioritization.preview, autoScoring.results])
+    if (activeGoals.length < 2 || goalPrioritization.loading) return
+
+    const isFirstRun = !goalPrioritization.preview && !hasRunRef.current
+    const weightsChanged = weightsKey && weightsKey !== lastWeightsKeyRef.current
+
+    if (!isFirstRun && !weightsChanged) return
+
+    hasRunRef.current = true
+    lastWeightsKeyRef.current = weightsKey || lastWeightsKeyRef.current
+
+    // NOTE: Impact is temporarily disabled - set to 0
+    const criteriaWeights = customWeights ? {
+      feasibility: customWeights.feasibility,
+      impact: 0, // Temporarily disabled
+      importance: customWeights.importance,
+      urgency: customWeights.urgency,
+    } : undefined
+
+    dispatch(previewGoalPrioritization({
+      monthStr,
+      data: {
+        month_id: monthId,
+        criteria_weights: criteriaWeights,
+        goals: activeGoals.map(g => {
+          const autoScore = autoScoring.results?.goals.find(r => r.goal_id === g.id)
+          return {
+            id: g.id,
+            name: g.name,
+            target_amount: g.targetAmount,
+            current_amount: g.currentAmount,
+            target_date: g.targetDate || new Date().toISOString(),
+            type: g.category || 'other',
+            priority: g.priority,
+            ...(autoScore && {
+              feasibility_score: autoScore.scores.feasibility.score,
+              // impact_score: autoScore.scores.impact?.score || 0, // Temporarily disabled
+              importance_score: autoScore.scores.importance.score,
+              urgency_score: autoScore.scores.urgency.score,
+            })
+          }
+        })
+      }
+    }))
+  }, [
+    activeGoals,
+    monthId,
+    monthStr,
+    weightsKey,
+    !!goalPrioritization.preview,
+    goalPrioritization.loading,
+    dispatch
+  ])
 
   const getProgress = (goal: Goal) => {
     const current = goal.currentAmount || 0
     const target = goal.targetAmount || 1
     return (current / target) * 100
+  }
+
+  // Function to manually re-run preview with current weights
+  const handleRerunPreview = () => {
+    if (activeGoals.length < 2 || goalPrioritization.loading) return
+    
+    const customWeights = autoScoring.customWeights
+    // NOTE: Impact is temporarily disabled - set to 0
+    const criteriaWeights = customWeights ? {
+      feasibility: customWeights.feasibility,
+      impact: 0, // Temporarily disabled
+      importance: customWeights.importance,
+      urgency: customWeights.urgency,
+    } : undefined
+    
+    console.log('🔄 Re-running preview with weights:', criteriaWeights)
+    
+    dispatch(previewGoalPrioritization({
+      monthStr,
+      data: {
+        month_id: monthId,
+        criteria_weights: criteriaWeights,
+        goals: activeGoals.map(g => {
+          const autoScore = autoScoring.results?.goals.find(r => r.goal_id === g.id)
+          return {
+            id: g.id,
+            name: g.name,
+            target_amount: g.targetAmount,
+            current_amount: g.currentAmount,
+            target_date: g.targetDate || new Date().toISOString(),
+            type: g.category || 'other',
+            priority: g.priority,
+            ...(autoScore && {
+              feasibility_score: autoScore.scores.feasibility.score,
+              // impact_score: autoScore.scores.impact?.score || 0, // Temporarily disabled
+              importance_score: autoScore.scores.importance.score,
+              urgency_score: autoScore.scores.urgency.score,
+            })
+          }
+        })
+      }
+    }))
   }
 
   return (
@@ -111,6 +156,14 @@ export function Problem1GoalsPage({ goals, monthId, monthStr, onNext }: Problem1
               <CardTitle className="text-2xl">Financial Goal Prioritization</CardTitle>
               <CardDescription>
                 Determine the relative importance of your active goals using AHP (Analytic Hierarchy Process).
+                {autoScoring.customWeights && (
+                  <span className="block mt-1 text-xs text-muted-foreground">
+                    Using custom weights: Feasibility {Math.round(autoScoring.customWeights.feasibility * 100)}%, 
+                    {/* Impact {Math.round(autoScoring.customWeights.impact * 100)}%, */} 
+                    Importance {Math.round(autoScoring.customWeights.importance * 100)}%, 
+                    Urgency {Math.round(autoScoring.customWeights.urgency * 100)}%
+                  </span>
+                )}
               </CardDescription>
             </div>
           </div>
@@ -132,13 +185,48 @@ export function Problem1GoalsPage({ goals, monthId, monthStr, onNext }: Problem1
             </div>
           )}
 
+          {/* Trường hợp ít mục tiêu */}
+          {activeGoals.length === 0 && (
+            <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-900">
+              Hiện tại bạn chưa chọn mục tiêu nào cho tháng này. Hãy quay lại bước trước để chọn ít nhất 1 mục tiêu,
+              hoặc nhấn <strong>Tiếp tục</strong> để bỏ qua bước ưu tiên mục tiêu.
+            </div>
+          )}
+
+          {activeGoals.length === 1 && (
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-900 space-y-2">
+              <p>
+                Chỉ có <strong>01 mục tiêu</strong> đang hoạt động, vì vậy độ ưu tiên là hiển nhiên: 
+                mục tiêu này sẽ được xem là ưu tiên cao nhất (100%).
+              </p>
+              <div className="mt-2 p-3 bg-white rounded border border-blue-100">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold">{activeGoals[0].name}</span>
+                  <Badge variant="default">Priority 1</Badge>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Results: Ranked Goals */}
-          {goalPrioritization.preview && (
+          {goalPrioritization.preview && activeGoals.length >= 2 && (
             <div className="space-y-4">
-              <h3 className="text-lg font-bold flex items-center">
-                 <CheckCircle2 className="w-5 h-5 mr-2 text-green-600" />
-                 Thứ tự ưu tiên được đề xuất
-              </h3>
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-bold flex items-center">
+                  <CheckCircle2 className="w-5 h-5 mr-2 text-green-600" />
+                  Thứ tự ưu tiên được đề xuất
+                </h3>
+                {autoScoring.customWeights && (
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={handleRerunPreview}
+                    disabled={goalPrioritization.loading}
+                  >
+                    🔄 Re-run với trọng số mới
+                  </Button>
+                )}
+              </div>
               
               <div className="space-y-3">
                 {goalPrioritization.preview.ranking.map((ranked, index) => {
@@ -178,15 +266,19 @@ export function Problem1GoalsPage({ goals, monthId, monthStr, onNext }: Problem1
                   )
                 })}
               </div>
-
-              <div className="pt-4">
-                <Button onClick={onNext} className="w-full" size="lg">
-                  Xác nhận & Tiếp tục
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              </div>
             </div>
           )}
+
+          {/* Navigation luôn hiển thị, kể cả khi không có/ít goal */}
+          <div className="pt-6 flex gap-3">
+            <Button variant="outline" onClick={onBack} className="flex-1">
+              <ArrowLeft className="mr-2 h-4 w-4" /> Quay lại
+            </Button>
+            <Button onClick={onNext} className="flex-1" size="lg">
+              Tiếp tục
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+          </div>
 
         </CardContent>
       </Card>

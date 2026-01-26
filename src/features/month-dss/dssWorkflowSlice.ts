@@ -4,11 +4,9 @@ import type {
   AutoScoringRequest,
   GoalPrioritizationRequest,
   DebtStrategyRequest,
-  PreviewGoalDebtTradeoffRequest,
   PreviewBudgetAllocationRequest,
   ApplyGoalPrioritizationRequest,
   ApplyDebtStrategyRequest,
-  ApplyGoalDebtTradeoffRequest,
   ApplyBudgetAllocationRequest,
   FinalizeDSSRequest,
   FinalizeDSSResponse,
@@ -46,40 +44,85 @@ interface GoalPrioritizationResult {
   }>;
 }
 
+interface PaymentPlan {
+  debt_id: string;
+  debt_name: string;
+  monthly_payment: number;
+  extra_payment: number;
+  payoff_month: number;
+  total_interest: number;
+  timeline?: Array<{
+    month: number;
+    start_balance: number;
+    interest: number;
+    payment: number;
+    end_balance: number;
+  }>;
+}
+
 interface DebtStrategyResult {
-  scenarios: Array<{
+  recommended_strategy: string;
+  strategy_comparison: Array<{
     strategy: string;
     total_interest: number;
-    months_to_debt_free: number;
-    monthly_payment: number;
+    months: number;
+    interest_saved: number;
+    first_debt_cleared: number;
+    description: string;
+    pros: string[];
+    cons: string[];
+    payment_plans?: PaymentPlan[];
+    monthly_allocation: number; // Total monthly payment allocation for this strategy
   }>;
-  recommended_strategy: string;
+  payment_plans?: PaymentPlan[]; // Payment plans for recommended strategy (revolving debts)
+  fixed_payments?: PaymentPlan[]; // Fixed payments for installment/interest_only debts (no chart needed)
+  // Optional high-level summary (mirrors DebtStrategyOutput)
+  total_interest?: number;
+  months_to_debt_free?: number;
+  reasoning?: string;
+  key_facts?: string[];
 }
 
-interface TradeoffResult {
-  recommended_goal_allocation: number;
-  recommended_debt_allocation: number;
-  scenarios: Array<{
-    name: string;
-    goal_percent: number;
-    debt_percent: number;
-  }>;
-}
+// Step 3 tradeoff removed - no longer used
 
 interface BudgetAllocationResult {
+  total_income: number;
   scenarios: Array<{
-    scenario_name: string;
+    scenario_type: string;
     category_allocations: Array<{
       category_id: string;
+      category_name: string;
       amount: number;
+      minimum: number;
+      maximum: number;
+      is_flexible: boolean;
+      priority: number;
     }>;
+    summary: {
+      total_income: number;
+      total_allocated: number;
+      surplus: number;
+      mandatory_expenses: number;
+      flexible_expenses: number;
+      total_debt_payments: number;
+      total_goal_contributions: number;
+      savings_rate: number;
+    };
+    feasibility_score: number;
   }>;
+  is_feasible: boolean;
 }
 
 interface DSSWorkflowState {
   currentStep: number;
   completedSteps: number[];
   isComplete: boolean;
+  
+  // Allocation params để thử số tiền cấp phát cho goal-debt (dùng cho Step 0 và Step 2)
+  allocationParams: {
+    goalAllocationPct: number; // 0-100, default 20
+    debtAllocationPct: number; // 0-100, default calculated from min_payment/income
+  };
   
   autoScoring: {
     loading: boolean;
@@ -103,15 +146,7 @@ interface DSSWorkflowState {
     error: string | null;
   };
   
-  goalDebtTradeoff: {
-    loading: boolean;
-    preview: TradeoffResult | null;
-    applied: boolean;
-    goalPercent: number | null;
-    debtPercent: number | null;
-    error: string | null;
-  };
-  
+  // Step 3: Budget Allocation (tradeoff step removed)
   budgetAllocation: {
     loading: boolean;
     preview: BudgetAllocationResult | null;
@@ -132,6 +167,11 @@ const initialState: DSSWorkflowState = {
   currentStep: 0,
   completedSteps: [],
   isComplete: false,
+  
+  allocationParams: {
+    goalAllocationPct: 20, // Default 20% income cho goals
+    debtAllocationPct: 0, // Sẽ được tính từ min_payment/income trong component
+  },
   
   autoScoring: {
     loading: false,
@@ -155,15 +195,6 @@ const initialState: DSSWorkflowState = {
     error: null,
   },
   
-  goalDebtTradeoff: {
-    loading: false,
-    preview: null,
-    applied: false,
-    goalPercent: null,
-    debtPercent: null,
-    error: null,
-  },
-  
   budgetAllocation: {
     loading: false,
     preview: null,
@@ -181,14 +212,26 @@ const initialState: DSSWorkflowState = {
 
 // ==================== Async Thunks - Preview ====================
 
-export const previewAutoScoring = createAsyncThunk(
+export const previewAutoScoring = createAsyncThunk<
+  AutoScoringResult,
+  { monthStr: string; data: AutoScoringRequest; useAllocationParams?: boolean },
+  { state: { dssWorkflow: DSSWorkflowState } }
+>(
   'dssWorkflow/previewAutoScoring',
-  async ({ monthStr, data }: { monthStr: string; data: AutoScoringRequest }, { rejectWithValue }) => {
+  async ({ monthStr, data, useAllocationParams = false }, { rejectWithValue, getState }) => {
     try {
-      // apiClient already unwraps .data, so response IS the data
-      const response = await dssWorkflowService.previewAutoScoring(monthStr, data);
+      // Nếu useAllocationParams = true, merge allocation params từ state vào request
+      // Step 0 chỉ dùng goal_allocation_pct (không có debt)
+      const finalData: AutoScoringRequest = { ...data };
+      if (useAllocationParams) {
+        const state = getState().dssWorkflow;
+        if (state.allocationParams.goalAllocationPct !== null) {
+          finalData.goal_allocation_pct = state.allocationParams.goalAllocationPct;
+        }
+      }
+      const response = await dssWorkflowService.previewAutoScoring(monthStr, finalData);
       console.log('✅ Thunk result:', response);
-      return response; // Don't access .data again!
+      return response as AutoScoringResult;
     } catch (error: any) {
       console.error('❌ Thunk error:', error);
       return rejectWithValue(error.response?.data?.message || 'Failed to preview auto-scoring');
@@ -196,13 +239,13 @@ export const previewAutoScoring = createAsyncThunk(
   }
 );
 
-export const previewGoalPrioritization = createAsyncThunk(
+export const previewGoalPrioritization = createAsyncThunk<GoalPrioritizationResult, { monthStr: string; data: GoalPrioritizationRequest }>(
   'dssWorkflow/previewGoalPrioritization',
-  async ({ monthStr, data }: { monthStr: string; data: GoalPrioritizationRequest }, { rejectWithValue }) => {
+  async ({ monthStr, data }, { rejectWithValue }) => {
     try {
       const response = await dssWorkflowService.previewGoalPrioritization(monthStr, data);
       console.log('✅ Goal prioritization response:', response);
-      return response; // apiClient already unwraps .data
+      return response as GoalPrioritizationResult;
     } catch (error: any) {
       console.error('❌ Goal prioritization error:', error);
       return rejectWithValue(error.response?.data?.message || 'Failed to preview goal prioritization');
@@ -210,36 +253,42 @@ export const previewGoalPrioritization = createAsyncThunk(
   }
 );
 
-export const previewDebtStrategy = createAsyncThunk(
+export const previewDebtStrategy = createAsyncThunk<
+  DebtStrategyResult,
+  { monthStr: string; data: DebtStrategyRequest; useAllocationParams?: boolean },
+  { state: { dssWorkflow: DSSWorkflowState } }
+>(
   'dssWorkflow/previewDebtStrategy',
-  async ({ monthStr, data }: { monthStr: string; data: DebtStrategyRequest }, { rejectWithValue }) => {
+  async ({ monthStr, data, useAllocationParams = false }, { rejectWithValue, getState }) => {
     try {
-      const response = await dssWorkflowService.previewDebtStrategy(monthStr, data);
-      return response.data;
+      // Nếu useAllocationParams = true, merge allocation params từ state vào request
+      const finalData: DebtStrategyRequest = { ...data };
+      if (useAllocationParams) {
+        const state = getState().dssWorkflow;
+        if (state.allocationParams.goalAllocationPct !== null) {
+          finalData.goal_allocation_pct = state.allocationParams.goalAllocationPct;
+        }
+        if (state.allocationParams.debtAllocationPct !== null) {
+          finalData.debt_allocation_pct = state.allocationParams.debtAllocationPct;
+        }
+      }
+      const response = await dssWorkflowService.previewDebtStrategy(monthStr, finalData);
+      // apiClient đã unwrap, response chính là body
+      return response as unknown as DebtStrategyResult;
     } catch (error: any) {
       return rejectWithValue(error.response?.data?.message || 'Failed to preview debt strategy');
     }
   }
 );
 
-export const previewGoalDebtTradeoff = createAsyncThunk(
-  'dssWorkflow/previewGoalDebtTradeoff',
-  async ({ monthStr, data }: { monthStr: string; data: PreviewGoalDebtTradeoffRequest }, { rejectWithValue }) => {
-    try {
-      const response = await dssWorkflowService.previewGoalDebtTradeoff(monthStr, data);
-      return response.data;
-    } catch (error: any) {
-      return rejectWithValue(error.response?.data?.message || 'Failed to preview goal-debt tradeoff');
-    }
-  }
-);
+// Step 3 tradeoff removed - no longer available
 
 export const previewBudgetAllocation = createAsyncThunk(
   'dssWorkflow/previewBudgetAllocation',
   async ({ monthStr, data }: { monthStr: string; data: PreviewBudgetAllocationRequest }, { rejectWithValue }) => {
     try {
       const response = await dssWorkflowService.previewBudgetAllocation(monthStr, data);
-      return response.data;
+      return response as unknown as BudgetAllocationResult;
     } catch (error: any) {
       return rejectWithValue(error.response?.data?.message || 'Failed to preview budget allocation');
     }
@@ -265,30 +314,22 @@ export const applyDebtStrategy = createAsyncThunk(
   async ({ monthStr, data }: { monthStr: string; data: ApplyDebtStrategyRequest }, { rejectWithValue }) => {
     try {
       await dssWorkflowService.applyDebtStrategy(monthStr, data);
-      return data;
+      // Request đã có selected_strategy, lưu trực tiếp từ request data
+      return { selected_strategy: data.selected_strategy };
     } catch (error: any) {
       return rejectWithValue(error.response?.data?.message || 'Failed to apply debt strategy');
     }
   }
 );
 
-export const applyGoalDebtTradeoff = createAsyncThunk(
-  'dssWorkflow/applyGoalDebtTradeoff',
-  async ({ monthStr, data }: { monthStr: string; data: ApplyGoalDebtTradeoffRequest }, { rejectWithValue }) => {
-    try {
-      await dssWorkflowService.applyGoalDebtTradeoff(monthStr, data);
-      return data;
-    } catch (error: any) {
-      return rejectWithValue(error.response?.data?.message || 'Failed to apply goal-debt tradeoff');
-    }
-  }
-);
+// Step 3 tradeoff removed - no longer available
 
 export const applyBudgetAllocation = createAsyncThunk(
   'dssWorkflow/applyBudgetAllocation',
   async ({ monthStr, data }: { monthStr: string; data: ApplyBudgetAllocationRequest }, { rejectWithValue }) => {
     try {
       await dssWorkflowService.applyBudgetAllocation(monthStr, data);
+      // Note: Backend now finalizes DSS workflow (saves to MonthState and clears Redis) in this call
       return data;
     } catch (error: any) {
       return rejectWithValue(error.response?.data?.message || 'Failed to apply budget allocation');
@@ -298,12 +339,13 @@ export const applyBudgetAllocation = createAsyncThunk(
 
 // ==================== Async Thunks - Workflow Management ====================
 
-export const fetchWorkflowStatus = createAsyncThunk(
+export const fetchWorkflowStatus = createAsyncThunk<any, string>(
   'dssWorkflow/fetchStatus',
-  async (monthStr: string, { rejectWithValue }) => {
+  async (monthStr, { rejectWithValue }) => {
     try {
       const response = await dssWorkflowService.getWorkflowStatus(monthStr);
-      return response.data;
+      // apiClient đã unwrap, trả về trực tiếp body
+      return response as any;
     } catch (error: any) {
       return rejectWithValue(error.response?.data?.message || 'Failed to fetch workflow status');
     }
@@ -348,8 +390,15 @@ const dssWorkflowSlice = createSlice({
     setCustomWeights: (state, action: PayloadAction<Record<string, number>>) => {
       state.autoScoring.customWeights = action.payload;
     },
-    clearError: (state, action: PayloadAction<'autoScoring' | 'goalPrioritization' | 'debtStrategy' | 'goalDebtTradeoff' | 'budgetAllocation'>) => {
+    clearError: (state, action: PayloadAction<'autoScoring' | 'goalPrioritization' | 'debtStrategy' | 'budgetAllocation'>) => {
       state[action.payload].error = null;
+    },
+    setAllocationParams: (state, action: PayloadAction<{ goalAllocationPct: number | null; debtAllocationPct: number | null }>) => {
+      state.allocationParams = action.payload;
+    },
+    // Reset toàn bộ local DSS state (không gọi API reset workflow)
+    resetLocalDSSState: () => {
+      return initialState;
     },
   },
   extraReducers: (builder) => {
@@ -359,7 +408,7 @@ const dssWorkflowSlice = createSlice({
         state.autoScoring.loading = true;
         state.autoScoring.error = null;
       })
-      .addCase(previewAutoScoring.fulfilled, (state, action) => {
+      .addCase(previewAutoScoring.fulfilled, (state, action: PayloadAction<AutoScoringResult>) => {
         state.autoScoring.loading = false;
         state.autoScoring.results = action.payload;
       })
@@ -374,7 +423,7 @@ const dssWorkflowSlice = createSlice({
         state.goalPrioritization.loading = true;
         state.goalPrioritization.error = null;
       })
-      .addCase(previewGoalPrioritization.fulfilled, (state, action) => {
+      .addCase(previewGoalPrioritization.fulfilled, (state, action: PayloadAction<GoalPrioritizationResult>) => {
         state.goalPrioritization.loading = false;
         state.goalPrioritization.preview = action.payload;
       })
@@ -392,8 +441,14 @@ const dssWorkflowSlice = createSlice({
       .addCase(applyGoalPrioritization.fulfilled, (state) => {
         state.goalPrioritization.loading = false;
         state.goalPrioritization.applied = true;
-        state.completedSteps.push(1);
-        state.currentStep = 2;
+        // Cho phép Step 1 và Step 2 chạy song song - không ép currentStep
+        if (!state.completedSteps.includes(1)) {
+          state.completedSteps.push(1);
+        }
+        // Chỉ update currentStep nếu chưa có step nào khác completed
+        if (state.currentStep < 1) {
+          state.currentStep = 1;
+        }
       })
       .addCase(applyGoalPrioritization.rejected, (state, action) => {
         state.goalPrioritization.loading = false;
@@ -425,47 +480,21 @@ const dssWorkflowSlice = createSlice({
         state.debtStrategy.loading = false;
         state.debtStrategy.applied = true;
         state.debtStrategy.selectedStrategy = action.payload.selected_strategy;
-        state.completedSteps.push(2);
-        state.currentStep = 3;
+        // Cho phép Step 1 và Step 2 chạy song song - không ép currentStep
+        if (!state.completedSteps.includes(2)) {
+          state.completedSteps.push(2);
+        }
+        // Chỉ update currentStep nếu chưa có step nào khác completed
+        if (state.currentStep < 2) {
+          state.currentStep = 2;
+        }
       })
       .addCase(applyDebtStrategy.rejected, (state, action) => {
         state.debtStrategy.loading = false;
         state.debtStrategy.error = action.payload as string;
       });
 
-    // Preview Goal-Debt Tradeoff
-    builder
-      .addCase(previewGoalDebtTradeoff.pending, (state) => {
-        state.goalDebtTradeoff.loading = true;
-        state.goalDebtTradeoff.error = null;
-      })
-      .addCase(previewGoalDebtTradeoff.fulfilled, (state, action) => {
-        state.goalDebtTradeoff.loading = false;
-        state.goalDebtTradeoff.preview = action.payload;
-      })
-      .addCase(previewGoalDebtTradeoff.rejected, (state, action) => {
-        state.goalDebtTradeoff.loading = false;
-        state.goalDebtTradeoff.error = action.payload as string;
-      });
-
-    // Apply Goal-Debt Tradeoff
-    builder
-      .addCase(applyGoalDebtTradeoff.pending, (state) => {
-        state.goalDebtTradeoff.loading = true;
-        state.goalDebtTradeoff.error = null;
-      })
-      .addCase(applyGoalDebtTradeoff.fulfilled, (state, action) => {
-        state.goalDebtTradeoff.loading = false;
-        state.goalDebtTradeoff.applied = true;
-        state.goalDebtTradeoff.goalPercent = action.payload.goal_allocation_percent;
-        state.goalDebtTradeoff.debtPercent = action.payload.debt_allocation_percent;
-        state.completedSteps.push(3);
-        state.currentStep = 4;
-      })
-      .addCase(applyGoalDebtTradeoff.rejected, (state, action) => {
-        state.goalDebtTradeoff.loading = false;
-        state.goalDebtTradeoff.error = action.payload as string;
-      });
+    // Step 3 tradeoff removed - no longer available
 
     // Preview Budget Allocation
     builder
@@ -492,8 +521,11 @@ const dssWorkflowSlice = createSlice({
         state.budgetAllocation.loading = false;
         state.budgetAllocation.applied = true;
         state.budgetAllocation.selectedScenario = action.payload.selected_scenario;
-        state.completedSteps.push(4);
-        state.currentStep = 4;
+        // Step 3 là Budget Allocation (tradeoff đã bị xoá)
+        if (!state.completedSteps.includes(3)) {
+          state.completedSteps.push(3);
+        }
+        state.currentStep = 3;
         state.isComplete = true;
       })
       .addCase(applyBudgetAllocation.rejected, (state, action) => {
@@ -527,7 +559,7 @@ const dssWorkflowSlice = createSlice({
         // Mark all steps as applied
         state.goalPrioritization.applied = action.payload.dss_workflow.step1_applied;
         state.debtStrategy.applied = action.payload.dss_workflow.step2_applied;
-        state.goalDebtTradeoff.applied = action.payload.dss_workflow.step3_applied;
+        // Step 3 tradeoff removed - step3_applied luôn false
         state.budgetAllocation.applied = action.payload.dss_workflow.step4_applied;
         
         // Update workflow status
@@ -538,9 +570,9 @@ const dssWorkflowSlice = createSlice({
       .addCase(finalizeDSS.rejected, (state, action) => {
         state.finalize.loading = false;
         state.finalize.error = action.payload as string;
-      });
+    });
   },
 });
 
-export const { setCurrentStep, setCustomWeights, clearError } = dssWorkflowSlice.actions;
+export const { setCurrentStep, setCustomWeights, clearError, resetLocalDSSState, setAllocationParams } = dssWorkflowSlice.actions;
 export default dssWorkflowSlice.reducer;

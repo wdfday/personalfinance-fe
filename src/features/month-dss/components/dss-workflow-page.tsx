@@ -162,7 +162,7 @@ export function DSSWorkflowPage({
       <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 py-4 border-b">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold">DSS Workflow</h1>
+            <h1 className="text-3xl font-bold">Planning</h1>
             <p className="text-muted-foreground">Complete 4 steps to optimize your budget</p>
           </div>
           <div className="flex gap-2">
@@ -305,7 +305,7 @@ export function DSSWorkflowPage({
           </CardHeader>
           <CardContent className="space-y-6">
             {/* Debt Overview */}
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <p className="text-sm text-muted-foreground">Total Debt</p>
                 <p className="text-2xl font-bold">
@@ -318,10 +318,6 @@ export function DSSWorkflowPage({
                   ${(debts || []).reduce((sum, d) => sum + (d.minimum_payment || 0), 0).toLocaleString()}
                 </p>
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Monthly Budget</p>
-                <p className="text-2xl font-bold text-primary">${totalDebtBudget.toLocaleString()}</p>
-              </div>
             </div>
 
             {/* Preview Button */}
@@ -333,45 +329,66 @@ export function DSSWorkflowPage({
 
             {/* Strategy Cards */}
             {debtStrategy.preview && !debtStrategy.loading && (
-              <div className="space-y-3">
-                {debtStrategy.preview.scenarios.map((scenario) => {
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {debtStrategy.preview.strategy_comparison
+                  .filter((scenario) => scenario.strategy === 'avalanche' || scenario.strategy === 'snowball')
+                  .map((scenario) => {
                   const isSelected = selectedStrategy === scenario.strategy
                   const isRecommended = scenario.strategy === debtStrategy.preview?.recommended_strategy
+                  const strategyName = scenario.strategy === 'avalanche' ? 'Avalanche' : 'Snowball'
 
                   return (
                     <Card
                       key={scenario.strategy}
                       className={`cursor-pointer transition-all ${
-                        isSelected ? 'ring-2 ring-primary' : ''
-                      }`}
+                        isSelected ? 'ring-2 ring-primary shadow-md' : ''
+                      } ${isRecommended ? 'border-primary border-2' : ''}`}
                       onClick={() => setSelectedStrategy(scenario.strategy)}
                     >
-                      <CardHeader>
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <CardTitle className="flex items-center gap-2">
-                              {scenario.strategy.charAt(0).toUpperCase() + scenario.strategy.slice(1)}
-                              {isRecommended && <Badge>Recommended</Badge>}
-                              {isSelected && <CheckCircle2 className="h-5 w-5 text-primary" />}
-                            </CardTitle>
+                      <CardContent className="py-4 space-y-3">
+                        {/* Strategy Name */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-semibold text-base">{strategyName}</h3>
+                            {isRecommended && <Badge variant="secondary" className="text-xs">Rec</Badge>}
+                          </div>
+                          {isSelected && <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0" />}
+                        </div>
+                        
+                        {/* Metrics - improved layout */}
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between items-center">
+                            <span className="text-muted-foreground">Phân bổ/tháng:</span>
+                            <span className="font-bold text-primary">
+                              {(scenario.monthly_allocation || 0).toLocaleString('vi-VN')} ₫
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-muted-foreground">Interest:</span>
+                            <span className="font-semibold">{scenario.total_interest.toLocaleString('vi-VN')} ₫</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-muted-foreground">Thời gian:</span>
+                            <span className="font-semibold">{scenario.months} tháng</span>
                           </div>
                         </div>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="grid grid-cols-3 gap-4 text-sm">
-                          <div>
-                            <p className="text-muted-foreground">Total Interest</p>
-                            <p className="font-bold">${scenario.total_interest.toLocaleString()}</p>
+                        
+                        {/* Debt breakdown - hiển thị phân bổ từng debt */}
+                        {scenario.payment_plans && scenario.payment_plans.length > 0 && (
+                          <div className="pt-3 border-t space-y-2">
+                            <div className="text-muted-foreground font-medium text-sm mb-2">Phân bổ từng debt:</div>
+                            {scenario.payment_plans.map((plan: any) => (
+                              <div key={plan.debt_id} className="flex justify-between items-center py-1">
+                                <span className="text-muted-foreground truncate flex-1 mr-2 text-sm" title={plan.debt_name}>
+                                  {plan.debt_name}
+                                </span>
+                                <span className="font-semibold text-primary whitespace-nowrap text-sm">
+                                  {(plan.monthly_payment || 0).toLocaleString('vi-VN')} ₫
+                                </span>
+                              </div>
+                            ))}
                           </div>
-                          <div>
-                            <p className="text-muted-foreground">Payoff Time</p>
-                            <p className="font-bold">{scenario.months_to_debt_free} months</p>
-                          </div>
-                          <div>
-                            <p className="text-muted-foreground">Monthly</p>
-                            <p className="font-bold">${scenario.monthly_payment.toLocaleString()}</p>
-                          </div>
-                        </div>
+                        )}
                       </CardContent>
                     </Card>
                   )

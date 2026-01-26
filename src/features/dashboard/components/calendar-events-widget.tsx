@@ -53,7 +53,7 @@ const mockCalendarDays = Array.from({ length: 31 }, (_, i) => ({
 }))
 
 export function CalendarEventsWidget() {
-  const [view, setView] = useState<"calendar" | "events">("events")
+  const [view, setView] = useState<"calendar" | "events">("calendar")
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("vi-VN", {

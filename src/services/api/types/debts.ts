@@ -7,6 +7,7 @@ export interface Debt {
   description?: string
   type: DebtType
   status: DebtStatus
+  behavior?: 'revolving' | 'installment' | 'interest_only' // Payment behavior
   principal_amount: number
   current_balance: number
   interest_rate: number
@@ -46,6 +47,7 @@ export interface CreateDebtRequest {
   name: string
   description?: string
   type: DebtType
+  behavior?: 'revolving' | 'installment' | 'interest_only' // Payment behavior
   principal_amount: number
   current_balance?: number
   interest_rate?: number

@@ -16,11 +16,26 @@ interface FinalizeDSSButtonProps {
 
 export function FinalizeDSSButton({ monthStr, monthId, onComplete }: FinalizeDSSButtonProps) {
   const dispatch = useAppDispatch();
-  const { finalize, goalPrioritization, debtStrategy, goalDebtTradeoff, budgetAllocation } = useAppSelector(
+  const { finalize, goalPrioritization, debtStrategy, budgetAllocation } = useAppSelector(
     (state) => state.dssWorkflow
   );
 
   const handleFinalize = async () => {
+    // Note: ApplyBudgetAllocation now finalizes DSS workflow automatically
+    // This button is kept for backward compatibility or re-finalization if needed
+    
+    // Check if budget allocation has been applied (which means DSS is already finalized)
+    if (budgetAllocation.applied) {
+      toast({
+        title: "✅ DSS Already Finalized",
+        description: "Budget allocation has been applied. DSS workflow is complete.",
+      });
+      if (onComplete) {
+        onComplete();
+      }
+      return;
+    }
+
     // Build request from Redux state (cached preview results)
     const request: FinalizeDSSRequest = {
       use_auto_scoring: false, // User reviewed manually
@@ -35,14 +50,10 @@ export function FinalizeDSSButton({ monthStr, monthId, onComplete }: FinalizeDSS
       // Step 2: Debt strategy (if applied)
       debt_strategy: debtStrategy.selectedStrategy || undefined,
       
-      // Step 3: Tradeoff (if applied)
-      tradeoff_choice: goalDebtTradeoff.goalPercent !== null ? {
-        scenario_type: 'balanced', // TODO: Get from user selection
-        goal_allocation_pct: goalDebtTradeoff.goalPercent,
-        debt_allocation_pct: goalDebtTradeoff.debtPercent || 0,
-      } : undefined,
+      // Step 3 tradeoff removed - no longer used
+      tradeoff_choice: undefined,
       
-      // Step 4: Budget allocations from preview
+      // Step 3: Budget allocations from preview (Step 3 trong workflow mới)
       budget_allocations: budgetAllocation.preview?.scenarios[0]?.category_allocations.reduce((acc, item) => {
         acc[item.category_id] = item.amount;
         return acc;
@@ -77,6 +88,11 @@ export function FinalizeDSSButton({ monthStr, monthId, onComplete }: FinalizeDSS
     goalPrioritization.preview !== null &&
     budgetAllocation.preview !== null;
 
+  // Hide if budget allocation already applied (DSS already finalized)
+  if (budgetAllocation.applied) {
+    return null;
+  }
+
   if (!hasPreviewResults) {
     return null; // Don't show until previews are done
   }
@@ -108,12 +124,6 @@ export function FinalizeDSSButton({ monthStr, monthId, onComplete }: FinalizeDSS
               <CheckCircle2 className="h-4 w-4 text-green-500" />
               <span className="text-sm">
                 {debtStrategy.selectedStrategy ? 'Debt strategy selected' : 'No debts'}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 text-green-500" />
-              <span className="text-sm">
-                {goalDebtTradeoff.goalPercent !== null ? 'Trade-off optimized' : 'Skipped'}
               </span>
             </div>
             <div className="flex items-center gap-2">

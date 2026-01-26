@@ -1,10 +1,17 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import React, { useEffect, useState } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { useAppDispatch, useAppSelector } from "@/lib/hooks"
-import { fetchTransactions, setFilters } from "@/features/transactions/transactionsSlice"
+import { fetchTransactions, fetchMoreTransactions, setFilters, updateTransaction } from "@/features/transactions/transactionsSlice"
 import { fetchAccounts } from "@/features/accounts/accountsSlice"
+import { fetchCategories } from "@/features/categories/categoriesSlice"
+import { fetchBudgets, fetchBudget } from "@/features/budgets/budgetsSlice"
+import { budgetsService } from "@/services/api"
+import { fetchDebts } from "@/features/debts/debtsSlice"
+import { fetchIncomeProfiles } from "@/features/income/incomeSlice"
+import { CategoryPickerPopover } from "@/components/categories/category-picker-popover"
+import { TransactionLinkSelector } from "@/features/transactions/components/transaction-link-selector"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -13,12 +20,14 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Plus, Search, Filter, ArrowUpRight, ArrowDownRight, Edit, Trash2, TrendingUp, TrendingDown, Wallet, User, Tag, Target, CreditCard, DollarSign, ChevronDown, ChevronRight, Building } from "lucide-react"
+import { Plus, Search, Filter, ArrowUpRight, ArrowDownRight, TrendingUp, TrendingDown, Wallet, User, Tag, Target, CreditCard, DollarSign, ChevronDown, ChevronRight, Building, Trash2, Calendar, Upload } from "lucide-react"
 import { CreateTransactionModal } from "@/features/transactions/create-transaction-modal"
 import { EditTransactionModal } from "@/features/transactions/edit-transaction-modal"
 import { DeleteTransactionModal } from "@/features/transactions/delete-transaction-modal"
+import { ImportTransactionModal } from "@/features/transactions/import-transaction-modal"
 import { useTranslation } from "@/contexts/i18n-context"
-import type { Transaction } from "@/types/api"
+import { toast } from "sonner"
+import type { Transaction, TransactionLink } from "@/types/api"
 
 export default function TransactionsPage() {
   const router = useRouter()
@@ -26,14 +35,20 @@ export default function TransactionsPage() {
   const dispatch = useAppDispatch()
   const { t } = useTranslation("transactions")
   const { t: tCommonActions } = useTranslation("common.actions")
-  const { transactions, isLoading, error, filters, pagination, summary } = useAppSelector((state) => state.transactions)
+  const { transactions, isLoading, isLoadingMore, hasMore, error, filters, pagination, summary } = useAppSelector((state) => state.transactions)
   const { accounts } = useAppSelector((state) => state.accounts)
+  const { categories } = useAppSelector((state) => state.categories)
+  const { budgets = [] } = useAppSelector((state) => state.budgets)
+  const { debts = [] } = useAppSelector((state) => state.debts)
+  const { items: incomeProfiles = [] } = useAppSelector((state) => state.income)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
+  const [budgetNamesCache, setBudgetNamesCache] = useState<Record<string, string>>({})
 
   // Read account query parameter from URL on mount and when URL changes
   useEffect(() => {
@@ -51,10 +66,39 @@ export default function TransactionsPage() {
 
   useEffect(() => {
     dispatch(fetchTransactions(filters))
-    if (accounts.length === 0) {
-      dispatch(fetchAccounts())
+  }, [dispatch, filters])
+  
+  // Load more transactions when scrolling
+  useEffect(() => {
+    const handleScroll = () => {
+      // Check if we're near the bottom of the page
+      const scrollTop = window.pageYOffset || document.documentElement.scrollTop
+      const scrollHeight = document.documentElement.scrollHeight
+      const clientHeight = document.documentElement.clientHeight
+      
+      // Load more when user is within 200px of the bottom
+      if (scrollHeight - scrollTop - clientHeight < 200) {
+        if (hasMore && !isLoading && !isLoadingMore) {
+          const nextPage = pagination.page + 1
+          // Don't update filters.page to avoid triggering fetchTransactions
+          // Just pass the next page to fetchMoreTransactions
+          dispatch(fetchMoreTransactions({ ...filters, page: nextPage }))
+        }
+      }
     }
-  }, [dispatch, filters, accounts.length])
+    
+    window.addEventListener('scroll', handleScroll)
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [dispatch, filters, hasMore, isLoading, isLoadingMore, pagination.page])
+
+  // Fetch all related data for category and links selection
+  useEffect(() => {
+    dispatch(fetchAccounts())
+    dispatch(fetchCategories())
+    dispatch(fetchBudgets())
+    dispatch(fetchDebts())
+    dispatch(fetchIncomeProfiles())
+  }, [dispatch])
 
   const handleFilterChange = (key: string, value: string) => {
     dispatch(setFilters({ [key]: value || undefined }))
@@ -158,6 +202,85 @@ export default function TransactionsPage() {
     }
   }
 
+  // Fetch budget name if not in cache
+  useEffect(() => {
+    const fetchMissingBudgets = async () => {
+      if (transactions.length === 0 || budgets.length === 0) return
+      
+      const budgetIds = new Set<string>()
+      transactions.forEach(tx => {
+        tx.links?.forEach(link => {
+          if (link.type === 'BUDGET' && !budgets.find(b => b.id === link.id)) {
+            budgetIds.add(link.id)
+          }
+        })
+      })
+
+      // Only fetch budgets not in cache
+      const toFetch = Array.from(budgetIds).filter(id => !budgetNamesCache[id])
+      if (toFetch.length === 0) return
+
+      for (const budgetId of toFetch) {
+        try {
+          const budget = await budgetsService.getById(budgetId)
+          setBudgetNamesCache(prev => ({ ...prev, [budgetId]: budget.name }))
+        } catch (error) {
+          // Budget not found or error - keep cache empty
+        }
+      }
+    }
+
+    fetchMissingBudgets()
+  }, [transactions, budgets])
+
+  const getLinkName = (link: TransactionLink): string => {
+    switch (link.type) {
+      case 'BUDGET': {
+        const budget = budgets.find(b => b.id === link.id)
+        if (budget) return budget.name
+        if (budgetNamesCache[link.id]) return budgetNamesCache[link.id]
+        return `Budget ${link.id.slice(0, 8)}`
+      }
+      case 'DEBT':
+        return debts.find(d => d.id === link.id)?.name || `Debt ${link.id.slice(0, 8)}`
+      case 'INCOME_PROFILE':
+        const income = incomeProfiles.find(i => i.id === link.id)
+        return income ? (income.source || income.description || `Income ${link.id.slice(0, 8)}`) : `Income ${link.id.slice(0, 8)}`
+      default:
+        return link.type
+    }
+  }
+
+  const handleUpdateCategory = async (transaction: Transaction, categoryId: string) => {
+    try {
+      await dispatch(updateTransaction({
+        id: transaction.id,
+        data: { userCategoryId: categoryId }
+      })).unwrap()
+      toast.success("Cập nhật danh mục thành công!")
+    } catch (error) {
+      toast.error("Lỗi cập nhật danh mục: " + error)
+    }
+  }
+
+  const handleUpdateLinks = async (transaction: Transaction, links: TransactionLink[]) => {
+    // Only allow adding links if transaction has no existing links
+    if (transaction.links && transaction.links.length > 0) {
+      toast.error("Giao dịch này đã có liên kết và không thể thay đổi")
+      return
+    }
+    
+    try {
+      await dispatch(updateTransaction({
+        id: transaction.id,
+        data: { links }
+      })).unwrap()
+      toast.success("Cập nhật liên kết thành công!")
+    } catch (error) {
+      toast.error("Lỗi cập nhật liên kết: " + error)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -191,10 +314,16 @@ export default function TransactionsPage() {
           <h1 className="text-3xl font-bold tracking-tight">{t("page.title")}</h1>
           <p className="text-muted-foreground">{t("page.subtitle")}</p>
         </div>
-        <Button onClick={() => setIsCreateModalOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          {t("page.addAction")}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setIsImportModalOpen(true)}>
+            <Upload className="mr-2 h-4 w-4" />
+            Import JSON/CSV
+          </Button>
+          <Button onClick={() => setIsCreateModalOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            {t("page.addAction")}
+          </Button>
+        </div>
       </div>
 
       {/* Main Layout Grid */}
@@ -381,21 +510,19 @@ export default function TransactionsPage() {
               <TableRow>
                 <TableHead className="w-[30px]"></TableHead>
                 <TableHead>{t("table.headers.description")}</TableHead>
-                <TableHead className="hidden md:table-cell">{t("table.headers.counterparty", { defaultValue: "Đối tác" })}</TableHead>
-                <TableHead className="hidden lg:table-cell">{t("table.headers.tags", { defaultValue: "Tags" })}</TableHead>
+                <TableHead className="hidden xl:table-cell">{t("table.headers.category", { defaultValue: "Danh mục" })}</TableHead>
                 <TableHead className="hidden xl:table-cell">{t("table.headers.links", { defaultValue: "Liên kết" })}</TableHead>
                 <TableHead>{t("table.headers.type")}</TableHead>
                 <TableHead>{t("table.headers.amount")}</TableHead>
                 <TableHead className="hidden md:table-cell">{t("table.headers.date")}</TableHead>
-                <TableHead>{t("table.headers.actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredTransactions.map((transaction) => {
                 const isExpanded = expandedRows.has(transaction.id)
                 return (
-                  <>
-                    <TableRow key={transaction.id}>
+                  <React.Fragment key={transaction.id}>
+                    <TableRow>
                       {/* Expand Toggle */}
                       <TableCell>
                         <Button
@@ -417,69 +544,65 @@ export default function TransactionsPage() {
                         <div>
                           <div className="font-medium">{transaction.description || t("table.noDescription")}</div>
                           {transaction.reference && (
-                            <div className="text-xs text-muted-foreground">
+                            <div className="text-xs text-muted-foreground font-mono mt-1">
                               Ref: {transaction.reference}
                             </div>
                           )}
                         </div>
                       </TableCell>
 
-                      {/* Counterparty */}
-                      <TableCell className="hidden md:table-cell">
-                        {transaction.counterparty?.name ? (
-                          <div className="flex items-center gap-1">
-                            {transaction.counterparty.type === 'MERCHANT' ? (
-                              <Building className="h-3 w-3 text-muted-foreground" />
-                            ) : (
-                              <User className="h-3 w-3 text-muted-foreground" />
-                            )}
-                            <span className="text-sm truncate max-w-[150px]">
-                              {transaction.counterparty.name}
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-
-                      {/* Tags */}
-                      <TableCell className="hidden lg:table-cell">
-                        {transaction.classification?.tags && transaction.classification.tags.length > 0 ? (
-                          <div className="flex gap-1 flex-wrap">
-                            {transaction.classification.tags.slice(0, 2).map((tag, idx) => (
-                              <Badge key={idx} variant="secondary" className="text-xs">
-                                {tag}
-                              </Badge>
-                            ))}
-                            {transaction.classification.tags.length > 2 && (
-                              <Badge variant="outline" className="text-xs">
-                                +{transaction.classification.tags.length - 2}
-                              </Badge>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">-</span>
-                        )}
+                      {/* Category */}
+                      <TableCell className="hidden xl:table-cell">
+                        <div className="min-w-[150px]">
+                          {transaction.userCategoryId ? (
+                            <Badge variant="secondary" className="text-xs">
+                              {categories.find(c => c.id === transaction.userCategoryId)?.name || "Category"}
+                            </Badge>
+                          ) : (
+                            <CategoryPickerPopover
+                              categories={categories}
+                              value={undefined}
+                              onChange={(categoryId) => handleUpdateCategory(transaction, categoryId)}
+                              placeholder="Chọn danh mục..."
+                              categoryType={transaction.direction === "CREDIT" ? "income" : "expense"}
+                              className="h-7 text-xs"
+                            />
+                          )}
+                        </div>
                       </TableCell>
 
                       {/* Links */}
                       <TableCell className="hidden xl:table-cell">
-                        {transaction.links && transaction.links.length > 0 ? (
-                          <div className="flex gap-1 flex-wrap">
-                            {transaction.links.map((link, idx) => (
-                              <Badge
-                                key={idx}
-                                variant="outline"
-                                className={`text-xs flex items-center gap-1 ${getLinkColor(link.type)}`}
-                              >
-                                {getLinkIcon(link.type)}
-                                <span className="capitalize">{link.type.toLowerCase()}</span>
-                              </Badge>
-                            ))}
-                          </div>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">-</span>
-                        )}
+                        <div className="min-w-[150px]">
+                          {transaction.links && transaction.links.length > 0 ? (
+                            <div className="flex gap-1 flex-wrap">
+                              {transaction.links.map((link, idx) => (
+                                <Badge
+                                  key={idx}
+                                  variant="outline"
+                                  className={`text-xs flex items-center gap-1 ${getLinkColor(link.type)}`}
+                                >
+                                  {getLinkIcon(link.type)}
+                                  <span>{getLinkName(link)}</span>
+                                </Badge>
+                              ))}
+                            </div>
+                          ) : (
+                              <TransactionLinkSelector
+                                value={[]}
+                                onChange={(links) => handleUpdateLinks(transaction, links)}
+                                budgets={budgets.filter(b => b.status !== 'ended').map(b => ({ id: b.id, name: b.name }))}
+                                debts={debts.map(d => ({ id: d.id, name: d.name }))}
+                                incomeProfiles={incomeProfiles.map(i => ({ 
+                                  id: i.id, 
+                                  name: i.source || i.description || `Income ${i.id.slice(0, 8)}` 
+                                }))}
+                                direction={transaction.direction}
+                                compact={true}
+                                className="w-full"
+                              />
+                          )}
+                        </div>
                       </TableCell>
 
                       {/* Type */}
@@ -502,29 +625,32 @@ export default function TransactionsPage() {
                         </span>
                       </TableCell>
 
-                      {/* Date */}
+                      {/* Date - Hiển thị bookingDate nếu có, nếu không thì createdAt */}
                       <TableCell className="hidden md:table-cell">
-                        {new Date(transaction.bookingDate).toLocaleDateString('vi-VN')}
-                      </TableCell>
-
-                      {/* Actions */}
-                      <TableCell>
-                        <div className="flex space-x-1">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleEdit(transaction)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-red-600 hover:text-red-700"
-                            onClick={() => handleDelete(transaction)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                        <div className="text-sm">
+                          {transaction.bookingDate ? (
+                            <div title={`Thời gian giao dịch: ${new Date(transaction.bookingDate).toLocaleString('vi-VN')}`}>
+                              {new Date(transaction.bookingDate).toLocaleString('vi-VN', {
+                                day: '2-digit',
+                                month: '2-digit',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </div>
+                          ) : transaction.createdAt ? (
+                            <div title={`Tạo lúc: ${new Date(transaction.createdAt).toLocaleString('vi-VN')}`}>
+                              {new Date(transaction.createdAt).toLocaleString('vi-VN', {
+                                day: '2-digit',
+                                month: '2-digit',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -532,7 +658,7 @@ export default function TransactionsPage() {
                     {/* Expandable Details Row */}
                     {isExpanded && (
                       <TableRow>
-                        <TableCell colSpan={9} className="bg-muted/30">
+                        <TableCell colSpan={8} className="bg-muted/30">
                           <div className="p-4 space-y-3">
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                               {/* Account */}
@@ -560,63 +686,95 @@ export default function TransactionsPage() {
                                 </Badge>
                               </div>
 
-                              {/* Counterparty Full */}
-                              {transaction.counterparty && (
+
+                              {/* Category */}
+                              {(transaction.categoryId || transaction.userCategoryId) && (
                                 <div>
-                                  <div className="text-xs font-medium text-muted-foreground mb-1">Đối tác</div>
-                                  <div className="text-sm space-y-1">
-                                    <div className="flex items-center gap-1">
-                                      {transaction.counterparty.type === 'MERCHANT' ? (
-                                        <Building className="h-3 w-3" />
-                                      ) : (
-                                        <User className="h-3 w-3" />
-                                      )}
-                                      {transaction.counterparty.name}
-                                    </div>
-                                    {transaction.counterparty.accountNumber && (
-                                      <div className="text-xs text-muted-foreground">
-                                        STK: {transaction.counterparty.accountNumber}
-                                      </div>
-                                    )}
-                                    {transaction.counterparty.bankName && (
-                                      <div className="text-xs text-muted-foreground">
-                                        {transaction.counterparty.bankName}
-                                      </div>
-                                    )}
+                                  <div className="text-xs font-medium text-muted-foreground mb-1">Danh mục</div>
+                                  <div className="text-sm flex items-center gap-1">
+                                    <Tag className="h-3 w-3" />
+                                    {categories.find(c => c.id === (transaction.categoryId || transaction.userCategoryId))?.name || `Category ${(transaction.categoryId || transaction.userCategoryId)?.slice(0, 8)}...`}
                                   </div>
                                 </div>
                               )}
 
-                              {/* All Tags */}
-                              {transaction.classification?.tags && transaction.classification.tags.length > 0 && (
+                              {/* Reference (Double - First) */}
+                              {transaction.reference && (
                                 <div>
-                                  <div className="text-xs font-medium text-muted-foreground mb-1">Tags</div>
-                                  <div className="flex gap-1 flex-wrap">
-                                    {transaction.classification.tags.map((tag, idx) => (
-                                      <Badge key={idx} variant="secondary" className="text-xs flex items-center gap-1">
-                                        <Tag className="h-3 w-3" />
-                                        {tag}
-                                      </Badge>
-                                    ))}
+                                  <div className="text-xs font-medium text-muted-foreground mb-1">Mã tham chiếu (Reference)</div>
+                                  <div className="text-sm font-mono text-xs bg-muted p-2 rounded border">
+                                    {transaction.reference}
                                   </div>
                                 </div>
                               )}
 
-                              {/* All Links */}
+                              {/* Reference (Double - Second) */}
+                              {transaction.reference && (
+                                <div>
+                                  <div className="text-xs font-medium text-muted-foreground mb-1">Mã tham chiếu (Duplicate)</div>
+                                  <div className="text-sm font-mono text-xs bg-muted/50 p-2 rounded border border-dashed">
+                                    {transaction.reference}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* External ID (if different from reference) */}
+                              {transaction.external_id && transaction.external_id !== transaction.reference && (
+                                <div>
+                                  <div className="text-xs font-medium text-muted-foreground mb-1">External ID</div>
+                                  <div className="text-sm font-mono text-xs bg-muted p-2 rounded">
+                                    {transaction.external_id}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Date - Hiển thị bookingDate nếu có, nếu không thì createdAt */}
+                              {(transaction.bookingDate || transaction.createdAt) && (
+                                <div>
+                                  <div className="text-xs font-medium text-muted-foreground mb-1">
+                                    {transaction.bookingDate ? "Thời gian giao dịch" : "Thời gian tạo"}
+                                  </div>
+                                  <div className="text-sm flex items-center gap-1">
+                                    <Calendar className="h-3 w-3" />
+                                    {transaction.bookingDate ? (
+                                      <span>{new Date(transaction.bookingDate).toLocaleString('vi-VN', {
+                                        day: '2-digit',
+                                        month: '2-digit',
+                                        year: 'numeric',
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                      })}</span>
+                                    ) : transaction.createdAt ? (
+                                      <span>{new Date(transaction.createdAt).toLocaleString('vi-VN', {
+                                        day: '2-digit',
+                                        month: '2-digit',
+                                        year: 'numeric',
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                      })}</span>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* All Links - Full Details */}
                               {transaction.links && transaction.links.length > 0 && (
-                                <div>
-                                  <div className="text-xs font-medium text-muted-foreground mb-1">Liên kết</div>
-                                  <div className="flex gap-1 flex-wrap">
+                                <div className="lg:col-span-3">
+                                  <div className="text-xs font-medium text-muted-foreground mb-2">Liên kết</div>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                                     {transaction.links.map((link, idx) => (
-                                      <Badge
+                                      <div
                                         key={idx}
-                                        variant="outline"
-                                        className={`text-xs flex items-center gap-1 ${getLinkColor(link.type)}`}
+                                        className={`p-2 rounded border ${getLinkColor(link.type)}`}
                                       >
-                                        {getLinkIcon(link.type)}
-                                        <span className="capitalize">{link.type.replace('_', ' ').toLowerCase()}</span>
-                                        <span className="text-xs text-muted-foreground">({link.id.slice(0, 8)}...)</span>
-                                      </Badge>
+                                        <div className="flex items-center gap-2 mb-1">
+                                          {getLinkIcon(link.type)}
+                                          <span className="text-xs font-semibold">{getLinkName(link)}</span>
+                                        </div>
+                                        <div className="text-xs text-muted-foreground capitalize">
+                                          {link.type.replace('_', ' ').toLowerCase()}
+                                        </div>
+                                      </div>
                                     ))}
                                   </div>
                                 </div>
@@ -636,15 +794,30 @@ export default function TransactionsPage() {
                         </TableCell>
                       </TableRow>
                     )}
-                  </>
+                  </React.Fragment>
                 )
               })}
             </TableBody>
           </Table>
 
-          {filteredTransactions.length === 0 && (
+          {filteredTransactions.length === 0 && !isLoading && (
             <div className="text-center py-8">
               <p className="text-muted-foreground">{t("table.noResults")}</p>
+            </div>
+          )}
+          
+          {/* Loading more indicator */}
+          {isLoadingMore && (
+            <div className="text-center py-4">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto"></div>
+              <p className="mt-2 text-sm text-muted-foreground">Đang tải thêm...</p>
+            </div>
+          )}
+          
+          {/* End of list indicator */}
+          {!hasMore && filteredTransactions.length > 0 && !isLoadingMore && (
+            <div className="text-center py-4">
+              <p className="text-sm text-muted-foreground">Đã hiển thị tất cả giao dịch</p>
             </div>
           )}
         </CardContent>
@@ -657,6 +830,11 @@ export default function TransactionsPage() {
       <CreateTransactionModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
+      />
+
+      <ImportTransactionModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
       />
 
       <EditTransactionModal

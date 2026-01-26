@@ -134,6 +134,57 @@ export interface MonthViewResponse {
   categories: CategoryLineResponse[];
   created_at: string;
   updated_at: string;
+  
+  // DSS Workflow data (optional - only if DSS has been run)
+  dss_workflow?: DSSWorkflowSummary;
+  
+  // Goal and Debt allocations from DSS (optional - only if DSS has been run)
+  goal_allocations?: Record<string, number>; // goal_id -> allocated amount
+  debt_allocations?: Record<string, number>; // debt_id -> allocated amount
+}
+
+// DSS Workflow Summary
+export interface DSSWorkflowSummary {
+  current_step: number;
+  completed_steps: number[];
+  is_complete: boolean;
+  last_updated: string;
+  
+  goal_prioritization?: GoalPrioritizationSummary;
+  debt_strategy?: DebtStrategySummary;
+  budget_allocation?: BudgetAllocationSummary;
+}
+
+export interface GoalPrioritizationSummary {
+  method: string;
+  rankings: GoalRankingSummary[];
+}
+
+export interface GoalRankingSummary {
+  goal_id: string;
+  goal_name: string;
+  rank: number;
+  score: number;
+  suggested_amount: number;
+}
+
+export interface DebtStrategySummary {
+  strategy: string;
+  payment_plan?: DebtPaymentSummary[];
+}
+
+export interface DebtPaymentSummary {
+  debt_id: string;
+  debt_name: string;
+  min_payment: number;
+  extra_payment?: number;
+  total_payment: number;
+}
+
+export interface BudgetAllocationSummary {
+  method: string;
+  optimality_score: number;
+  category_allocations: Record<string, number>; // category_id -> amount
 }
 
 export interface CategoryLineResponse {

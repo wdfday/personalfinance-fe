@@ -37,6 +37,28 @@ export const incomeProfilesService = {
   async verify(id: string, verified: boolean): Promise<IncomeProfile> {
     return apiClient.post<IncomeProfile>(`/income-profiles/${id}/verify`, { verified })
   },
+
+  async archive(id: string): Promise<IncomeProfile> {
+    return apiClient.post<IncomeProfile>(`/income-profiles/${id}/archive`, {})
+  },
+
+  async unarchive(id: string): Promise<IncomeProfile> {
+    return apiClient.post<IncomeProfile>(`/income-profiles/${id}/unarchive`, {})
+  },
+
+  async end(id: string): Promise<IncomeProfile> {
+    return apiClient.post<IncomeProfile>(`/income-profiles/${id}/end`, {})
+  },
+
+  async getHistory(id: string): Promise<{
+    current: IncomeProfile
+    version_history: IncomeProfile[]
+  }> {
+    return apiClient.get<{
+      current: IncomeProfile
+      version_history: IncomeProfile[]
+    }>(`/income-profiles/${id}/history`)
+  },
 }
 
 export default incomeProfilesService

@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useAppDispatch } from "@/lib/hooks"
+import { useCategories } from "@/hooks/use-categories"
 import { createBudget } from "@/features/budgets/budgetsSlice"
 import {
     Dialog,
@@ -24,6 +25,7 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
+import { CategoryPickerPopover } from "@/components/categories/category-picker-popover"
 
 interface CreateBudgetModalProps {
     open: boolean
@@ -33,6 +35,7 @@ interface CreateBudgetModalProps {
 
 export function CreateBudgetModal({ open, onOpenChange, onSuccess }: CreateBudgetModalProps) {
     const dispatch = useAppDispatch()
+    const { categories } = useCategories()
     const [isSubmitting, setIsSubmitting] = useState(false)
 
     const [formData, setFormData] = useState({
@@ -40,11 +43,10 @@ export function CreateBudgetModal({ open, onOpenChange, onSuccess }: CreateBudge
         description: "",
         amount: "",
         currency: "VND",
-        period: "monthly",
+        period: "",
         start_date: new Date().toISOString().split('T')[0],
         end_date: "",
         category_id: "",
-        account_id: "",
         enable_alerts: true,
         alert_thresholds: ["75", "90"],
         allow_rollover: false,
@@ -61,11 +63,10 @@ export function CreateBudgetModal({ open, onOpenChange, onSuccess }: CreateBudge
                 description: formData.description || undefined,
                 amount: parseFloat(formData.amount),
                 currency: formData.currency,
-                period: formData.period,
+                period: formData.period || undefined, // Optional - defaults to one-time if not provided
                 start_date: new Date(formData.start_date).toISOString(),
                 end_date: formData.end_date ? new Date(formData.end_date).toISOString() : undefined,
                 category_id: formData.category_id || undefined,
-                account_id: formData.account_id || undefined,
                 enable_alerts: formData.enable_alerts,
                 alert_thresholds: formData.alert_thresholds,
                 allow_rollover: formData.allow_rollover,
@@ -81,11 +82,10 @@ export function CreateBudgetModal({ open, onOpenChange, onSuccess }: CreateBudge
                 description: "",
                 amount: "",
                 currency: "VND",
-                period: "monthly",
+                period: "",
                 start_date: new Date().toISOString().split('T')[0],
                 end_date: "",
                 category_id: "",
-                account_id: "",
                 enable_alerts: true,
                 alert_thresholds: ["75", "90"],
                 allow_rollover: false,
@@ -177,15 +177,18 @@ export function CreateBudgetModal({ open, onOpenChange, onSuccess }: CreateBudge
                     {/* Period & Dates */}
                     <div className="space-y-4">
                         <div className="grid gap-2">
-                            <Label htmlFor="period">Period *</Label>
+                            <Label htmlFor="period">
+                                Period <span className="text-xs text-muted-foreground">(Optional - defaults to One-time)</span>
+                            </Label>
                             <Select
-                                value={formData.period}
-                                onValueChange={(value) => setFormData({ ...formData, period: value })}
+                                value={formData.period || ""}
+                                onValueChange={(value) => setFormData({ ...formData, period: value || "" })}
                             >
                                 <SelectTrigger>
-                                    <SelectValue />
+                                    <SelectValue placeholder="Select period or leave empty for one-time" />
                                 </SelectTrigger>
                                 <SelectContent>
+                                    <SelectItem value="one-time">One-time</SelectItem>
                                     <SelectItem value="daily">Daily</SelectItem>
                                     <SelectItem value="weekly">Weekly</SelectItem>
                                     <SelectItem value="monthly">Monthly</SelectItem>
@@ -224,30 +227,17 @@ export function CreateBudgetModal({ open, onOpenChange, onSuccess }: CreateBudge
 
                     {/* Scope */}
                     <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="grid gap-2">
-                                <Label htmlFor="category_id">
-                                    Category ID <span className="text-xs text-muted-foreground">(Optional)</span>
-                                </Label>
-                                <Input
-                                    id="category_id"
-                                    placeholder="Leave empty for all categories"
-                                    value={formData.category_id}
-                                    onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
-                                />
-                            </div>
-
-                            <div className="grid gap-2">
-                                <Label htmlFor="account_id">
-                                    Account ID <span className="text-xs text-muted-foreground">(Optional)</span>
-                                </Label>
-                                <Input
-                                    id="account_id"
-                                    placeholder="Leave empty for all accounts"
-                                    value={formData.account_id}
-                                    onChange={(e) => setFormData({ ...formData, account_id: e.target.value })}
-                                />
-                            </div>
+                        <div className="grid gap-2">
+                            <Label>
+                                Category <span className="text-xs text-muted-foreground">(Optional)</span>
+                            </Label>
+                            <CategoryPickerPopover
+                                categories={categories}
+                                value={formData.category_id || undefined}
+                                onChange={(categoryId) => setFormData({ ...formData, category_id: categoryId })}
+                                placeholder="Chọn danh mục hoặc để trống cho tất cả"
+                                categoryType="expense"
+                            />
                         </div>
                     </div>
 

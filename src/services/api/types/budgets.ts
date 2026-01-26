@@ -6,7 +6,7 @@ export interface Budget {
   name: string
   description?: string
   category_id?: string
-  account_id?: string
+  constraint_id?: string // FK to budget_constraint (if created from DSS)
   amount: number
   currency: string
   period: BudgetPeriod
@@ -29,18 +29,18 @@ export interface Budget {
   deleted_at?: string
 }
 
-export type BudgetPeriod = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'custom'
-export type BudgetStatus = 'active' | 'exceeded' | 'warning' | 'paused' | 'expired'
+export type BudgetPeriod = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'custom' | 'one-time'
+export type BudgetStatus = 'active' | 'exceeded' | 'warning' | 'paused' | 'expired' | 'ended'
 export type AlertThreshold = '50' | '75' | '90' | '100'
 
 export interface CreateBudgetRequest {
   name: string
   description?: string
   category_id?: string
-  account_id?: string
+  constraint_id?: string // Optional: link to budget constraint
   amount: number
   currency: string
-  period: BudgetPeriod
+  period?: BudgetPeriod // Optional - defaults to one-time if not provided
   start_date: string
   end_date?: string
   enable_alerts?: boolean
@@ -57,7 +57,6 @@ export interface BudgetFilters {
   status?: BudgetStatus
   period?: BudgetPeriod
   category_id?: string
-  account_id?: string
   limit?: number
   offset?: number
 }

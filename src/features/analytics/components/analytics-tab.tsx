@@ -57,7 +57,7 @@ export function AnalyticsTab() {
             <CardTitle className="text-xl font-semibold">Customer Segmentation</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width={600} height={300} minWidth={0}>
               <BarChart data={customerSegmentationData}>
                 <XAxis dataKey="segment" />
                 <YAxis />
@@ -72,7 +72,7 @@ export function AnalyticsTab() {
             <CardTitle className="text-xl font-semibold">Customer Retention Rate</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width={600} height={300} minWidth={0}>
               <LineChart data={retentionRateData}>
                 <XAxis dataKey="month" />
                 <YAxis />
@@ -89,7 +89,7 @@ export function AnalyticsTab() {
             <CardTitle className="text-xl font-semibold">Channel Performance</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width={600} height={300} minWidth={0}>
               <BarChart data={channelPerformanceData}>
                 <XAxis dataKey="channel" />
                 <YAxis yAxisId="left" />

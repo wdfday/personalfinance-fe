@@ -3,17 +3,23 @@
 import { useState, useEffect } from "react"
 import { useAppDispatch, useAppSelector } from "@/lib/hooks"
 import { updateTransaction } from "@/features/transactions/transactionsSlice"
+import { fetchCategories } from "@/features/categories/categoriesSlice"
+import { fetchBudgets } from "@/features/budgets/budgetsSlice"
+import { fetchDebts } from "@/features/debts/debtsSlice"
+import { fetchIncomeProfiles } from "@/features/income/incomeSlice"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { CategoryPickerPopover } from "@/components/categories/category-picker-popover"
+import { TransactionLinkSelector } from "@/features/transactions/components/transaction-link-selector"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
 import { toast } from "sonner"
-import type { Transaction, UpdateTransactionRequest, TransactionDirection, TransactionInstrument } from "@/types/api"
+import type { Transaction, UpdateTransactionRequest, TransactionDirection, TransactionInstrument, TransactionLink } from "@/types/api"
 
 const updateTransactionSchema = z.object({
   accountId: z.string().optional(),
@@ -26,7 +32,6 @@ const updateTransactionSchema = z.object({
   userNote: z.string().max(1000).optional(),
   counterpartyName: z.string().optional(),
   userCategoryId: z.string().optional(),
-  isTransfer: z.boolean().optional(),
 })
 
 type UpdateTransactionForm = z.infer<typeof updateTransactionSchema>
@@ -40,7 +45,31 @@ interface EditTransactionModalProps {
 export function EditTransactionModal({ isOpen, onClose, transaction }: EditTransactionModalProps) {
   const dispatch = useAppDispatch()
   const { accounts } = useAppSelector((state) => state.accounts)
+  const { categories = [] } = useAppSelector((state) => state.categories)
+  const { budgets = [] } = useAppSelector((state) => state.budgets)
+  const { debts = [] } = useAppSelector((state) => state.debts)
+  const { items: incomeProfiles = [] } = useAppSelector((state) => state.income)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [selectedLinks, setSelectedLinks] = useState<TransactionLink[]>([])
+
+  // Fetch data when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      if (categories.length === 0) {
+        dispatch(fetchCategories())
+      }
+      if (budgets.length === 0) {
+        dispatch(fetchBudgets())
+      }
+      if (debts.length === 0) {
+        dispatch(fetchDebts())
+      }
+      // Only fetch income profiles if transaction is CREDIT (income)
+      if (transaction?.direction === "CREDIT" && incomeProfiles.length === 0) {
+        dispatch(fetchIncomeProfiles())
+      }
+    }
+  }, [isOpen, dispatch, categories.length, budgets.length, debts.length, incomeProfiles.length, transaction?.direction])
 
   const {
     register,
@@ -64,8 +93,15 @@ export function EditTransactionModal({ isOpen, onClose, transaction }: EditTrans
       setValue("description", transaction.description || "")
       setValue("userNote", transaction.userNote || "")
       setValue("counterpartyName", transaction.counterparty?.name || "")
-      setValue("userCategoryId", transaction.classification?.userCategoryId || "")
-      setValue("isTransfer", transaction.classification?.isTransfer || false)
+      setValue("userCategoryId", transaction.userCategoryId || transaction.classification?.userCategoryId || "")
+      // Set links if transaction has no existing links (can only add if empty)
+      if (transaction.links && transaction.links.length > 0) {
+        // Transaction already has links - cannot modify
+        setSelectedLinks([])
+      } else {
+        // No existing links - can add new ones
+        setSelectedLinks([])
+      }
     }
   }, [transaction, setValue])
 
@@ -90,11 +126,16 @@ export function EditTransactionModal({ isOpen, onClose, transaction }: EditTrans
       if (data.userNote !== undefined) payload.userNote = data.userNote
       if (data.counterpartyName) payload.counterpartyName = data.counterpartyName
       if (data.userCategoryId) payload.userCategoryId = data.userCategoryId
-      if (data.isTransfer !== undefined) payload.isTransfer = data.isTransfer
+      
+      // Only add links if transaction has no existing links
+      if (selectedLinks.length > 0 && (!transaction.links || transaction.links.length === 0)) {
+        payload.links = selectedLinks
+      }
 
       await dispatch(updateTransaction({ id: transaction.id, data: payload })).unwrap()
       toast.success("Cập nhật giao dịch thành công!")
       reset()
+      setSelectedLinks([])
       onClose()
     } catch (error) {
       toast.error("Lỗi cập nhật giao dịch: " + error)
@@ -105,6 +146,7 @@ export function EditTransactionModal({ isOpen, onClose, transaction }: EditTrans
 
   const handleClose = () => {
     reset()
+    setSelectedLinks([])
     onClose()
   }
 
@@ -247,6 +289,54 @@ export function EditTransactionModal({ isOpen, onClose, transaction }: EditTrans
               {...register("userNote")}
               rows={2}
             />
+          </div>
+
+          {/* Category */}
+          <div className="space-y-2">
+            <Label>Danh mục</Label>
+            <CategoryPickerPopover
+              categories={categories}
+              value={watch("userCategoryId")}
+              onChange={(categoryId) => setValue("userCategoryId", categoryId)}
+              placeholder="Chọn danh mục..."
+              categoryType={(direction || transaction?.direction) === "CREDIT" ? "income" : "expense"}
+            />
+          </div>
+
+          {/* Links */}
+          <div className="space-y-2">
+            <Label>Liên kết</Label>
+            {transaction.links && transaction.links.length > 0 ? (
+              <div className="text-sm text-muted-foreground p-2 border rounded-md bg-muted/50">
+                Giao dịch này đã có liên kết và không thể thay đổi. 
+                <div className="mt-2 space-y-1">
+                  {transaction.links.map((link, idx) => (
+                    <div key={idx} className="text-xs">
+                      {link.type}: {link.id.slice(0, 8)}...
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <>
+                <TransactionLinkSelector
+                  value={selectedLinks}
+                  onChange={setSelectedLinks}
+                  budgets={budgets.filter(b => b.status !== 'ended').map(b => ({ id: b.id, name: b.name }))}
+                  debts={debts.map(d => ({ id: d.id, name: d.name }))}
+                  incomeProfiles={incomeProfiles.map(i => ({ 
+                    id: i.id, 
+                    name: i.source || i.description || `Income ${i.id.slice(0, 8)}` 
+                  }))}
+                  direction={transaction?.direction}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {transaction?.direction === "CREDIT" 
+                    ? "Liên kết transaction với Income Profile"
+                    : "Liên kết transaction với Budget hoặc Debt"}
+                </p>
+              </>
+            )}
           </div>
 
           <div className="flex justify-end space-x-2 pt-4">

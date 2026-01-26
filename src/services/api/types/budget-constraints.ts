@@ -27,7 +27,7 @@ export interface BudgetConstraint {
   archived_at?: string
 }
 
-export type ConstraintStatus = 'active' | 'pending' | 'ended' | 'archived' | 'paused'
+export type ConstraintStatus = 'active' | 'ended' | 'archived'
 
 export interface CreateBudgetConstraintRequest {
   category_id: string
@@ -54,6 +54,11 @@ export interface BudgetConstraintListResponse {
   budget_constraints: BudgetConstraint[]
   count: number
   summary?: BudgetConstraintSummary
+}
+
+export interface BudgetConstraintWithHistoryResponse {
+  current: BudgetConstraint
+  version_history?: BudgetConstraint[]
 }
 
 export interface BudgetConstraintSummary {

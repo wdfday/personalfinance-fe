@@ -9,12 +9,11 @@ interface IncomeCardProps {
   income: IncomeProfile
   onEdit: (income: IncomeProfile) => void
   onDelete?: (id: string) => void
-  onVerify?: (id: string, verified: boolean) => void
   onClick?: () => void
   isSelected?: boolean
 }
 
-export function IncomeCard({ income, onEdit, onDelete, onVerify, onClick, isSelected }: IncomeCardProps) {
+export function IncomeCard({ income, onEdit, onDelete, onClick, isSelected }: IncomeCardProps) {
   return (
     <Card 
         className={`relative group mb-3 transition-all cursor-pointer hover:border-primary/50 ${isSelected ? 'border-primary shadow-md ring-1 ring-primary/20' : ''} ${!income.is_active ? 'opacity-70' : ''}`}

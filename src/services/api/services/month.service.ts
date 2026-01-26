@@ -15,6 +15,21 @@ export const monthService = {
     return apiClient.get<MonthViewResponse>(`/months/${monthStr}`)
   },
 
+  // Get month view, auto-create if not found (404)
+  async getMonthViewOrCreate(monthStr: string): Promise<MonthViewResponse> {
+    try {
+      return await this.getMonthView(monthStr)
+    } catch (e: any) {
+      // Auto-create month if not found (404)
+      const status = e?.status || e?.response?.status
+      if (status === 404) {
+        await this.createMonth(monthStr)
+        return await this.getMonthView(monthStr)
+      }
+      throw e
+    }
+  },
+
   // Get full month entity by ID
   async getMonthById(id: string): Promise<Month> {
     return apiClient.get<Month>(`/months/${id}`)

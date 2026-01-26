@@ -44,6 +44,8 @@ export function BudgetCard({
                 return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
             case 'expired':
                 return 'bg-slate-100 text-slate-800 dark:bg-slate-900 dark:text-slate-200'
+            case 'ended':
+                return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
             default:
                 return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
         }

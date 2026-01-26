@@ -84,8 +84,8 @@ export function MonthDSSStep({
             </CardHeader>
             <CardContent>
                  {result ? (
-                    <div className="h-[300px] w-full mt-4">
-                        <ResponsiveContainer width="100%" height="100%">
+                    <div className="w-full mt-4" style={{ minHeight: 300 }}>
+                        <ResponsiveContainer width={600} height={300} minWidth={0}>
                         <BarChart
                             data={result.allocations || []}
                             margin={{ top: 20, right: 30, left: 20, bottom: 5 }}

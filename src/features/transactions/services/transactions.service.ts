@@ -107,6 +107,45 @@ class TransactionsService {
       count: transactions.length,
     }
   }
+
+  /**
+   * Import transactions từ JSON
+   */
+  async importJSONTransactions(data: {
+    accountId: string
+    bankCode: string
+    transactions: unknown[]
+  }): Promise<{
+    totalReceived: number
+    successCount: number
+    skippedCount: number
+    failedCount: number
+    importedIds: string[]
+    skippedIds: string[]
+    errors?: Array<{ bankTransactionId: string; error: string }>
+    accountBalance?: {
+      accountId: string
+      previousBalance: number
+      newBalance: number
+      lastSyncedAt: string
+    }
+  }> {
+    return baseApiClient.post<{
+      totalReceived: number
+      successCount: number
+      skippedCount: number
+      failedCount: number
+      importedIds: string[]
+      skippedIds: string[]
+      errors?: Array<{ bankTransactionId: string; error: string }>
+      accountBalance?: {
+        accountId: string
+        previousBalance: number
+        newBalance: number
+        lastSyncedAt: string
+      }
+    }>('/transactions/import/json', data)
+  }
 }
 
 export const transactionsService = new TransactionsService()

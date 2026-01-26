@@ -3,9 +3,12 @@ import { CheckCircle2, Edit2, Trash2, AlertTriangle, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { BudgetConstraint } from "@/services/api/types/budget-constraints"
+import type { Category } from "@/services/api/types/categories"
+import { CategoryPickerPopover } from "@/components/categories/category-picker-popover"
 
 interface ConstraintRowProps {
   constraint: BudgetConstraint
+  categories: Category[]
   isSelected: boolean
   isEditing: boolean
   onToggle: (id: string) => void
@@ -17,6 +20,7 @@ interface ConstraintRowProps {
 
 export function ConstraintRow({
   constraint: c,
+  categories,
   isSelected,
   isEditing,
   onToggle,
@@ -26,18 +30,22 @@ export function ConstraintRow({
   onDelete
 }: ConstraintRowProps) {
   // Local state for inputs to allow smooth typing without re-formatting interference
+  const [localCategoryId, setLocalCategoryId] = useState(c.category_id || '')
   const [localName, setLocalName] = useState(c.category_name || c.description || '')
   const [localMin, setLocalMin] = useState(c.minimum_amount?.toString() || '0')
   const [localMax, setLocalMax] = useState((c.maximum_amount || c.minimum_amount)?.toString() || '0')
   const [localFlexible, setLocalFlexible] = useState(c.is_flexible)
+  const [localError, setLocalError] = useState<string | null>(null)
 
   // Sync local state when external constraint changes
   useEffect(() => {
     if (!isEditing) {
+      setLocalCategoryId(c.category_id || '')
       setLocalName(c.category_name || c.description || '')
       setLocalMin(c.minimum_amount?.toString() || '0')
       setLocalMax((c.maximum_amount || c.minimum_amount)?.toString() || '0')
       setLocalFlexible(c.is_flexible)
+      setLocalError(null)
     }
   }, [c, isEditing])
 
@@ -46,6 +54,11 @@ export function ConstraintRow({
   }
 
   const handleSave = () => {
+    if (!localCategoryId) {
+      setLocalError("Vui lòng chọn danh mục (category) trước khi lưu")
+      return
+    }
+
     const minVal = parseFloat(localMin) || 0
     let maxVal = parseFloat(localMax) || 0
 
@@ -64,6 +77,7 @@ export function ConstraintRow({
     }
 
     onUpdate(c.id, {
+      category_id: localCategoryId,
       category_name: localName,
       description: localName,
       minimum_amount: minVal,
@@ -107,14 +121,25 @@ export function ConstraintRow({
       
       <td className="px-4 py-3">
         {isEditing ? (
-          <input
-            type="text"
-            value={localName}
-            onChange={(e) => setLocalName(e.target.value)}
-            onKeyDown={handleKeyDown}
-            className="w-full px-2 py-1 border rounded text-sm bg-background"
-            autoFocus
-          />
+          <div className="space-y-2">
+            <CategoryPickerPopover
+              categories={categories}
+              value={localCategoryId}
+              onChange={(nextId) => {
+                setLocalCategoryId(nextId)
+                const picked = categories.find((x) => x.id === nextId)
+                if (picked) {
+                  setLocalName(picked.name)
+                }
+                setLocalError(null)
+              }}
+              placeholder="Chọn danh mục (category)..."
+            />
+
+            {localError && (
+              <div className="text-xs text-red-600">{localError}</div>
+            )}
+          </div>
         ) : (
           <div>
             <div className="font-medium">{c.category_name || c.description || 'Unnamed'}</div>

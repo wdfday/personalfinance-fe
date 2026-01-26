@@ -3,11 +3,14 @@
 
 import { useEffect, useState } from "react"
 import { useAppDispatch, useAppSelector } from "@/lib/hooks"
-import { fetchIncomeProfiles, deleteIncomeProfile, verifyIncomeProfile } from "../incomeSlice"
+import { fetchIncomeProfiles, deleteIncomeProfile, archiveIncomeProfile, unarchiveIncomeProfile, endIncomeProfile } from "../incomeSlice"
 import { IncomeCard } from "../components/income-card"
 import { IncomeStats } from "../components/income-stats"
 import { IncomeDetail } from "../components/income-detail"
+import { IncomeCharts } from "../components/income-charts"
+import { fetchTransactions } from "@/features/transactions/transactionsSlice"
 import { CreateIncomeModal } from "../components/create-income-modal"
+import { EditIncomeModal } from "../components/edit-income-modal"
 import { Button } from "@/components/ui/button"
 import { Plus, Archive, ArchiveRestore } from "lucide-react"
 import { IncomeProfile } from "@/lib/api"
@@ -17,11 +20,19 @@ export default function IncomePage() {
   const dispatch = useAppDispatch()
   const { items, summary, isLoading } = useAppSelector((state) => state.income)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [selectedIncomeId, setSelectedIncomeId] = useState<string | null>(null)
+  const [editingIncome, setEditingIncome] = useState<IncomeProfile | null>(null)
   const [viewMode, setViewMode] = useState<"active" | "history">("active")
   
   useEffect(() => {
     dispatch(fetchIncomeProfiles())
+    
+    // Fetch income transactions cho charts
+    dispatch(fetchTransactions({ 
+      direction: "CREDIT",
+      pageSize: 100
+    }))
   }, [dispatch])
 
   const handleDelete = async (id: string) => {
@@ -34,13 +45,31 @@ export default function IncomePage() {
     }
   }
 
-  const handleVerify = async (id: string, verified: boolean) => {
-      await dispatch(verifyIncomeProfile({ id, verified }))
+  const handleEdit = (income: IncomeProfile) => {
+      setEditingIncome(income)
+      setIsEditModalOpen(true)
   }
 
-  const handleEdit = (income: IncomeProfile) => {
-      // TODO: Implement Edit Modal
-      console.log("Edit income", income)
+  const handleArchive = async (id: string) => {
+      if (confirm("Are you sure you want to archive this income profile?")) {
+          await dispatch(archiveIncomeProfile(id))
+          if (selectedIncomeId === id) {
+              setSelectedIncomeId(null)
+          }
+          dispatch(fetchIncomeProfiles())
+      }
+  }
+
+  const handleUnarchive = async (id: string) => {
+      await dispatch(unarchiveIncomeProfile(id))
+      dispatch(fetchIncomeProfiles())
+  }
+
+  const handleEnd = async (id: string) => {
+      if (confirm("Are you sure you want to mark this income profile as ended?")) {
+          await dispatch(endIncomeProfile(id))
+          dispatch(fetchIncomeProfiles())
+      }
   }
 
   // Filter items
@@ -107,9 +136,10 @@ export default function IncomePage() {
                      <IncomeDetail 
                          income={selectedIncome} 
                          onClose={() => setSelectedIncomeId(null)}
-                         onDelete={handleDelete}
                          onEdit={handleEdit}
-                         onVerify={handleVerify}
+                         onArchive={selectedIncome.is_archived ? undefined : handleArchive}
+                         onUnarchive={selectedIncome.is_archived ? handleUnarchive : undefined}
+                         onEnd={selectedIncome.status === 'active' ? handleEnd : undefined}
                      />
                  </div>
              ) : (
@@ -118,8 +148,9 @@ export default function IncomePage() {
                          <h1 className="text-3xl font-bold tracking-tight mb-2">Income Overview</h1>
                          <p className="text-muted-foreground">Select an income source to view details or manage your verified earnings below.</p>
                      </div>
-                     <div className="max-w-4xl w-full mx-auto">
+                     <div className="max-w-4xl w-full mx-auto space-y-6">
                          <IncomeStats summary={summary} isLoading={isLoading} />
+                         <IncomeCharts />
                      </div>
                      <div className="flex-1 flex items-center justify-center text-muted-foreground opacity-20">
                          <div className="text-center">
@@ -135,6 +166,16 @@ export default function IncomePage() {
         open={isCreateModalOpen} 
         onOpenChange={setIsCreateModalOpen}
         onSuccess={() => dispatch(fetchIncomeProfiles())}
+      />
+
+      <EditIncomeModal 
+        open={isEditModalOpen} 
+        onOpenChange={setIsEditModalOpen}
+        income={editingIncome}
+        onSuccess={() => {
+          dispatch(fetchIncomeProfiles())
+          setEditingIncome(null)
+        }}
       />
     </div>
   )

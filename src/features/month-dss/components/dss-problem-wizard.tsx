@@ -4,17 +4,19 @@ import { useState } from "react"
 import { Problem0AutoScorePage } from "./problem0-autoscore-page"
 import { Problem1GoalsPage } from "./problem1-goals-page"
 import { Problem2DebtPage } from "./problem2-debt-page"
-import { Problem3TradeoffPage } from "./problem3-tradeoff-page"
+// Step 3 tradeoff removed - no longer used
+// import { Problem3TradeoffPage } from "./problem3-tradeoff-page"
 import { Problem4AllocationPage } from "./problem4-allocation-page"
 import { Progress } from "@/components/ui/progress"
 import { CheckCircle2 } from "lucide-react"
 
-interface Goal {
+// Goal shape đến từ month-dss page (analytics) – khác với DTO ở các Problem*
+interface WizardGoal {
   id: string
   name: string
-  target_amount: number
-  current_amount: number
-  target_date?: string
+  targetAmount: number
+  currentAmount: number
+  targetDate?: string
   priority: string
   status: string
 }
@@ -28,7 +30,7 @@ interface Debt {
 }
 
 interface DSSProblemWizardProps {
-  readonly goals: Goal[]
+  readonly goals: WizardGoal[]
   readonly debts: Debt[]
   readonly monthStr: string
   readonly monthId: string
@@ -53,12 +55,12 @@ export function DSSProblemWizard({
   
   // Determine which problems are available
   // Start with 0 (Auto Score) if goals exist
+  // Step 3 tradeoff removed - workflow is now: 0, 1, 2, 3 (Budget Allocation)
   const availableProblems = [
     hasGoals ? 0 : null,       // P0: Auto Score (only if has goals)
     hasGoals ? 1 : null,       // P1: Goals (only if has goals)
     hasDebts ? 2 : null,       // P2: Debts (only if has debts)
-    (hasGoals && hasDebts) ? 3 : null,  // P3: Tradeoff (only if has both)
-    4                           // P4: Always show
+    3                           // P3: Budget Allocation (always show, Step 3 trong workflow mới)
   ].filter(p => p !== null) as number[]
 
   const [currentProblemIndex, setCurrentProblemIndex] = useState(0)
@@ -66,6 +68,11 @@ export function DSSProblemWizard({
 
   const currentProblem = availableProblems[currentProblemIndex]
   const totalProblems = availableProblems.length
+  
+  // Tính totalFixedCost từ constraints (chỉ tính các constraint được chọn và có minimum_amount)
+  const totalFixedCost = (constraints || [])
+    .filter((c: any) => c.minimum_amount && c.minimum_amount > 0)
+    .reduce((sum: number, c: any) => sum + (Number(c.minimum_amount) || 0), 0)
 
   const goToNext = () => {
     const problem = availableProblems[currentProblemIndex]
@@ -80,8 +87,8 @@ export function DSSProblemWizard({
   }
 
   const handleComplete = () => {
-    if (!completedProblems.includes(4)) {
-      setCompletedProblems([...completedProblems, 4])
+    if (!completedProblems.includes(3)) {
+      setCompletedProblems([...completedProblems, 3])
     }
     onComplete()
   }
@@ -89,9 +96,27 @@ export function DSSProblemWizard({
   const renderProblem = () => {
     switch (currentProblem) {
       case 0:
-        return <Problem0AutoScorePage goals={goals} monthId={monthId} monthStr={monthStr} monthlyIncome={monthlyIncome} onNext={goToNext} />
+        return (
+          <Problem0AutoScorePage
+            goals={goals}
+            monthId={monthId}
+            monthStr={monthStr}
+            monthlyIncome={monthlyIncome}
+            totalFixedCost={totalFixedCost}
+            onNext={goToNext}
+            onBack={goToBack}
+          />
+        )
       case 1:
-        return <Problem1GoalsPage goals={goals} monthId={monthId} monthStr={monthStr} onNext={goToNext} />
+        return (
+          <Problem1GoalsPage
+            goals={goals}
+            monthId={monthId}
+            monthStr={monthStr}
+            onNext={goToNext}
+            onBack={goToBack}
+          />
+        )
       case 2:
         return (
           <Problem2DebtPage
@@ -99,19 +124,24 @@ export function DSSProblemWizard({
             monthStr={monthStr}
             monthId={monthId}
             totalDebtBudget={totalDebtBudget}
+            monthlyIncome={monthlyIncome}
+            totalFixedCost={totalFixedCost}
             onNext={goToNext}
             onBack={goToBack}
           />
         )
       case 3:
-        return <Problem3TradeoffPage monthId={monthId} monthStr={monthStr} onNext={goToNext} onBack={goToBack} />
-      case 4:
+        // Step 3: Budget Allocation (tradeoff step removed)
         return (
           <Problem4AllocationPage 
             monthId={monthId} 
             monthStr={monthStr} 
             monthlyIncome={monthlyIncome}
             constraints={constraints}
+            goals={goals}
+            debts={debts}
+            goalAllocationPct={50}
+            debtAllocationPct={50}
             onBack={goToBack} 
             onComplete={handleComplete} 
           />
@@ -127,7 +157,7 @@ export function DSSProblemWizard({
       <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 py-4 border-b">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <h2 className="text-2xl font-bold">DSS Workflow</h2>
+            <h2 className="text-2xl font-bold">Planning</h2>
             <p className="text-muted-foreground">
               Step {currentProblemIndex + 1} of {totalProblems}
               {` (Method ${currentProblem})`}
@@ -153,8 +183,8 @@ export function DSSProblemWizard({
         <Progress value={(completedProblems.length / totalProblems) * 100} className="h-1" />
       </div>
 
-      {/* Current Problem */}
-      <div className="container mx-auto max-w-4xl">
+      {/* Current Problem - full width */}
+      <div className="w-full">
         {renderProblem()}
       </div>
     </div>

@@ -78,6 +78,42 @@ export const deleteIncomeProfile = createAsyncThunk(
   }
 )
 
+export const archiveIncomeProfile = createAsyncThunk(
+  'income/archiveIncomeProfile',
+  async (id: string, { rejectWithValue }) => {
+    try {
+      const response = await incomeProfilesService.archive(id)
+      return response
+    } catch (error: any) {
+      return rejectWithValue(error.message || 'Failed to archive income profile')
+    }
+  }
+)
+
+export const unarchiveIncomeProfile = createAsyncThunk(
+  'income/unarchiveIncomeProfile',
+  async (id: string, { rejectWithValue }) => {
+    try {
+      const response = await incomeProfilesService.unarchive(id)
+      return response
+    } catch (error: any) {
+      return rejectWithValue(error.message || 'Failed to unarchive income profile')
+    }
+  }
+)
+
+export const endIncomeProfile = createAsyncThunk(
+  'income/endIncomeProfile',
+  async (id: string, { rejectWithValue }) => {
+    try {
+      const response = await incomeProfilesService.end(id)
+      return response
+    } catch (error: any) {
+      return rejectWithValue(error.message || 'Failed to end income profile')
+    }
+  }
+)
+
 const incomeSlice = createSlice({
   name: 'income',
   initialState,
@@ -130,6 +166,27 @@ const incomeSlice = createSlice({
     builder
       .addCase(deleteIncomeProfile.fulfilled, (state, action) => {
         state.items = state.items.filter((item) => item.id !== action.payload)
+      })
+
+    // Archive, Unarchive & End
+    builder
+      .addCase(archiveIncomeProfile.fulfilled, (state, action) => {
+        const index = state.items.findIndex((item) => item.id === action.payload.id)
+        if (index !== -1) {
+          state.items[index] = action.payload
+        }
+      })
+      .addCase(unarchiveIncomeProfile.fulfilled, (state, action) => {
+        const index = state.items.findIndex((item) => item.id === action.payload.id)
+        if (index !== -1) {
+          state.items[index] = action.payload
+        }
+      })
+      .addCase(endIncomeProfile.fulfilled, (state, action) => {
+        const index = state.items.findIndex((item) => item.id === action.payload.id)
+        if (index !== -1) {
+          state.items[index] = action.payload
+        }
       })
   },
 })

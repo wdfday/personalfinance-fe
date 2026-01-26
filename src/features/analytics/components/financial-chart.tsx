@@ -19,8 +19,8 @@ export function FinancialChart() {
         <CardTitle>Financial Overview</CardTitle>
       </CardHeader>
       <CardContent className="pb-4">
-        <div className="h-[200px]">
-          <ResponsiveContainer width="100%" height="100%">
+        <div className="w-full" style={{ minHeight: 200 }}>
+          <ResponsiveContainer width={600} height={200} minWidth={0}>
             <LineChart data={data}>
               <XAxis dataKey="month" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
               <YAxis

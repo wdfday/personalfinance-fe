@@ -102,15 +102,29 @@ export const updateConstraint = createAsyncThunk(
     }
 )
 
-export const deleteConstraint = createAsyncThunk(
-    'budgetConstraints/deleteConstraint',
+export const archiveConstraint = createAsyncThunk(
+    'budgetConstraints/archiveConstraint',
     async (id: string, { rejectWithValue }) => {
         try {
-            await budgetConstraintsService.delete(id)
+            await budgetConstraintsService.archive(id)
             return id
         } catch (error) {
             return rejectWithValue(
-                error instanceof Error ? error.message : 'Failed to delete budget constraint'
+                error instanceof Error ? error.message : 'Failed to archive budget constraint'
+            )
+        }
+    }
+)
+
+export const endConstraint = createAsyncThunk(
+    'budgetConstraints/endConstraint',
+    async (id: string, { rejectWithValue }) => {
+        try {
+            const constraint = await budgetConstraintsService.end(id)
+            return constraint
+        } catch (error) {
+            return rejectWithValue(
+                error instanceof Error ? error.message : 'Failed to end budget constraint'
             )
         }
     }
@@ -212,21 +226,43 @@ const budgetConstraintsSlice = createSlice({
                 state.isLoading = false
                 state.error = action.payload as string
             })
-            // Delete Constraint
-            .addCase(deleteConstraint.pending, (state) => {
+            // Archive Constraint
+            .addCase(archiveConstraint.pending, (state) => {
                 state.isLoading = true
                 state.error = null
             })
-            .addCase(deleteConstraint.fulfilled, (state, action) => {
+            .addCase(archiveConstraint.fulfilled, (state, action) => {
                 state.isLoading = false
-                state.constraints = state.constraints.filter((c) => c.id !== action.payload)
-                state.total -= 1
+                const index = state.constraints.findIndex((c) => c.id === action.payload)
+                if (index !== -1) {
+                    state.constraints[index] = { ...state.constraints[index], status: 'archived' }
+                }
                 if (state.selectedConstraint?.id === action.payload) {
-                    state.selectedConstraint = null
+                    state.selectedConstraint = { ...state.selectedConstraint, status: 'archived' }
                 }
                 state.error = null
             })
-            .addCase(deleteConstraint.rejected, (state, action) => {
+            .addCase(archiveConstraint.rejected, (state, action) => {
+                state.isLoading = false
+                state.error = action.payload as string
+            })
+            // End Constraint
+            .addCase(endConstraint.pending, (state) => {
+                state.isLoading = true
+                state.error = null
+            })
+            .addCase(endConstraint.fulfilled, (state, action) => {
+                state.isLoading = false
+                const index = state.constraints.findIndex((c) => c.id === action.payload.id)
+                if (index !== -1) {
+                    state.constraints[index] = action.payload
+                }
+                if (state.selectedConstraint?.id === action.payload.id) {
+                    state.selectedConstraint = action.payload
+                }
+                state.error = null
+            })
+            .addCase(endConstraint.rejected, (state, action) => {
                 state.isLoading = false
                 state.error = action.payload as string
             })

@@ -131,6 +131,8 @@ export interface BudgetConstraint {
   period: string
   start_date: string
   end_date?: string
+  status: 'active' | 'ended' | 'archived'
+  description?: string
   created_at: string
   updated_at: string
 }
@@ -287,16 +289,8 @@ export interface IncomeProfile {
   amount: number
   currency: string
   frequency: string
-  base_salary: number
-  bonus: number
-  commission: number
-  allowance: number
-  other_income: number
-  total_income: number
-  income_breakdown?: Record<string, number>
   status: string
   is_recurring: boolean
-  is_verified: boolean
   is_active: boolean
   is_archived: boolean
   dss_metadata?: DSSMetadata
@@ -310,17 +304,13 @@ export interface IncomeProfile {
 }
 
 export interface CreateIncomeProfileRequest {
+  category_id: string
   source: string
   amount: number
   currency: string
   frequency: string
   start_date?: string
   end_date?: string
-  base_salary?: number
-  bonus?: number
-  commission?: number
-  allowance?: number
-  other_income?: number
   description?: string
   tags?: string[]
   is_recurring?: boolean

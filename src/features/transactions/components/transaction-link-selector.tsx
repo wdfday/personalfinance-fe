@@ -17,28 +17,52 @@ interface LinkOption {
 interface TransactionLinkSelectorProps {
     value: TransactionLink[]
     onChange: (links: TransactionLink[]) => void
-    goals?: { id: string; name: string }[]
     budgets?: { id: string; name: string }[]
     debts?: { id: string; name: string }[]
     incomeProfiles?: { id: string; name: string }[]
+    className?: string
+    compact?: boolean // For table cell display
+    direction?: 'DEBIT' | 'CREDIT' // Filter links based on transaction direction
 }
 
 export function TransactionLinkSelector({
     value = [],
     onChange,
-    goals = [],
     budgets = [],
     debts = [],
     incomeProfiles = [],
+    className,
+    compact = false,
+    direction,
 }: TransactionLinkSelectorProps) {
     const [open, setOpen] = useState(false)
 
-    // Combine all options with their types
+    // Filter options based on transaction direction
+    // DEBIT (outcome/expense): only Budget and Debt
+    // CREDIT (income): only Income Profile
+    let filteredBudgets: { id: string; name: string }[] = []
+    let filteredDebts: { id: string; name: string }[] = []
+    let filteredIncomeProfiles: { id: string; name: string }[] = []
+
+    if (direction === 'DEBIT') {
+        // For expenses: show Budget and Debt only
+        filteredBudgets = budgets
+        filteredDebts = debts
+    } else if (direction === 'CREDIT') {
+        // For income: show Income Profile only
+        filteredIncomeProfiles = incomeProfiles
+    } else {
+        // No direction specified: show all (except Goals - Goals use contribution mechanism)
+        filteredBudgets = budgets
+        filteredDebts = debts
+        filteredIncomeProfiles = incomeProfiles
+    }
+
+    // Combine filtered options with their types
     const allOptions: LinkOption[] = [
-        ...goals.map(g => ({ id: g.id, name: g.name, type: 'GOAL' as TransactionLinkType })),
-        ...budgets.map(b => ({ id: b.id, name: b.name, type: 'BUDGET' as TransactionLinkType })),
-        ...debts.map(d => ({ id: d.id, name: d.name, type: 'DEBT' as TransactionLinkType })),
-        ...incomeProfiles.map(i => ({ id: i.id, name: i.name, type: 'INCOME_PROFILE' as TransactionLinkType })),
+        ...filteredBudgets.map(b => ({ id: b.id, name: b.name, type: 'BUDGET' as TransactionLinkType })),
+        ...filteredDebts.map(d => ({ id: d.id, name: d.name, type: 'DEBT' as TransactionLinkType })),
+        ...filteredIncomeProfiles.map(i => ({ id: i.id, name: i.name, type: 'INCOME_PROFILE' as TransactionLinkType })),
     ]
 
     const getLinkIcon = (type: TransactionLinkType) => {
@@ -94,19 +118,20 @@ export function TransactionLinkSelector({
     }
 
     return (
-        <div className="space-y-2">
+        <div className={compact ? "space-y-1" : "space-y-2"}>
             <Popover open={open} onOpenChange={setOpen}>
                 <PopoverTrigger asChild>
                     <Button
                         variant="outline"
                         role="combobox"
                         aria-expanded={open}
-                        className="w-full justify-between"
+                        size={compact ? "sm" : "default"}
+                        className={`${compact ? "h-7 text-xs w-full" : "w-full"} justify-between ${className || ""}`}
                     >
-                        <span className="text-sm text-muted-foreground">
-                            {value.length > 0 ? `${value.length} liên kết đã chọn` : "Chọn liên kết..."}
+                        <span className={`${compact ? "text-xs" : "text-sm"} text-muted-foreground truncate`}>
+                            {value.length > 0 ? `${value.length} liên kết` : compact ? "Chọn..." : "Chọn liên kết..."}
                         </span>
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        <ChevronsUpDown className={`ml-2 ${compact ? "h-3 w-3" : "h-4 w-4"} shrink-0 opacity-50`} />
                     </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-full p-0" align="start">
@@ -115,34 +140,10 @@ export function TransactionLinkSelector({
                         <CommandList>
                             <CommandEmpty>Không tìm thấy.</CommandEmpty>
 
-                            {/* Goals */}
-                            {goals.length > 0 && (
-                                <CommandGroup heading="🎯 Mục tiêu">
-                                    {goals.map((goal) => {
-                                        const option: LinkOption = { id: goal.id, name: goal.name, type: 'GOAL' }
-                                        return (
-                                            <CommandItem
-                                                key={goal.id}
-                                                value={`goal-${goal.id}-${goal.name}`}
-                                                onSelect={() => handleSelect(option)}
-                                            >
-                                                <div className="flex items-center gap-2 flex-1">
-                                                    {getLinkIcon('GOAL')}
-                                                    <span className="text-sm">{goal.name}</span>
-                                                </div>
-                                                <Check
-                                                    className={`h-4 w-4 ${isSelected(goal.id) ? "opacity-100" : "opacity-0"}`}
-                                                />
-                                            </CommandItem>
-                                        )
-                                    })}
-                                </CommandGroup>
-                            )}
-
                             {/* Budgets */}
-                            {budgets.length > 0 && (
+                            {filteredBudgets.length > 0 && (
                                 <CommandGroup heading="💰 Ngân sách">
-                                    {budgets.map((budget) => {
+                                    {filteredBudgets.map((budget) => {
                                         const option: LinkOption = { id: budget.id, name: budget.name, type: 'BUDGET' }
                                         return (
                                             <CommandItem
@@ -164,9 +165,9 @@ export function TransactionLinkSelector({
                             )}
 
                             {/* Debts */}
-                            {debts.length > 0 && (
+                            {filteredDebts.length > 0 && (
                                 <CommandGroup heading="💳 Nợ">
-                                    {debts.map((debt) => {
+                                    {filteredDebts.map((debt) => {
                                         const option: LinkOption = { id: debt.id, name: debt.name, type: 'DEBT' }
                                         return (
                                             <CommandItem
@@ -188,9 +189,9 @@ export function TransactionLinkSelector({
                             )}
 
                             {/* Income Profiles */}
-                            {incomeProfiles.length > 0 && (
+                            {filteredIncomeProfiles.length > 0 && (
                                 <CommandGroup heading="💵 Thu nhập">
-                                    {incomeProfiles.map((profile) => {
+                                    {filteredIncomeProfiles.map((profile) => {
                                         const option: LinkOption = { id: profile.id, name: profile.name, type: 'INCOME_PROFILE' }
                                         return (
                                             <CommandItem
@@ -215,8 +216,8 @@ export function TransactionLinkSelector({
                 </PopoverContent>
             </Popover>
 
-            {/* Selected Links Display */}
-            {value.length > 0 && (
+            {/* Selected Links Display - Only show in non-compact mode */}
+            {!compact && value.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                     {value.map((link) => {
                         const option = getSelectedOption(link)

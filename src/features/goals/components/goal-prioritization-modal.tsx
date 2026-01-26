@@ -323,8 +323,8 @@ export function GoalPrioritizationModal({ goals, userId }: GoalPrioritizationMod
                                                         </div>
                                                     </div>
 
-                                                    {/* Impact */}
-                                                    <div className="space-y-1">
+                                                    {/* Impact - Temporarily disabled */}
+                                                    {/* <div className="space-y-1">
                                                         <div className="flex justify-between text-xs">
                                                             <span>💰 Tác động (Impact)</span>
                                                             <span className="font-medium">{(goalScores.impact * 100).toFixed(1)}%</span>
@@ -335,7 +335,7 @@ export function GoalPrioritizationModal({ goals, userId }: GoalPrioritizationMod
                                                                 style={{ width: `${goalScores.impact * 100}%` }}
                                                             />
                                                         </div>
-                                                    </div>
+                                                    </div> */}
                                                 </div>
                                             )}
                                         </div>

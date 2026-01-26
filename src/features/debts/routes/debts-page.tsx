@@ -8,9 +8,12 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Plus, Edit, Trash2, Eye, CreditCard } from "lucide-react"
+import { useRouter } from "next/navigation"
 import { CreateDebtModal } from "../create-debt-modal"
+import type { Debt } from "@/services/api/types/debts"
 
 export default function DebtsPage() {
+  const router = useRouter()
   const dispatch = useAppDispatch()
   const { debts = [], isLoading, error } = useAppSelector((state) => state.debts)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
@@ -196,8 +199,13 @@ export default function DebtsPage() {
                   )}
 
                   <div className="flex space-x-2 pt-2">
-                    <Button size="sm" variant="outline">
-                      <Eye className="h-4 w-4" />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => router.push(`/debts/${debt.id}`)}
+                    >
+                      <Eye className="h-4 w-4 mr-1" />
+                      View Details
                     </Button>
                     <Button size="sm" variant="outline">
                       <Edit className="h-4 w-4" />

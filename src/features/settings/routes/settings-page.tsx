@@ -19,8 +19,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Laptop, Smartphone, Tablet, Loader2 } from "lucide-react"
 import { useState, useEffect } from "react"
 import { toast } from "sonner"
-import { userService, profileService, authService } from "@/services/api"
-import type { UserProfile } from "@/services/api"
+import { financialProfileService, authService } from "@/services/api"
+import type { UserProfile, Profile } from "@/services/api"
 import { getErrorMessage } from "@/services/api/utils"
 
 const defaultAvatars = [
@@ -45,7 +45,7 @@ export default function SettingsPage() {
   const timezones = translations[locale]?.settings?.account?.timezones || {}
   
   // Profile state
-  const [profile, setProfile] = useState<UserProfile | null>(null)
+  const [profile, setProfile] = useState<Profile | null>(null)
   const [isLoadingProfileData, setIsLoadingProfileData] = useState(true)
   
   // Form states
@@ -78,7 +78,7 @@ export default function SettingsPage() {
   useEffect(() => {
     const loadProfile = async () => {
       try {
-        const profileData = await profileService.getProfile()
+        const profileData = await financialProfileService.getProfile()
         setProfile(profileData)
         
         // Update form states
@@ -112,6 +112,7 @@ export default function SettingsPage() {
   const handleSaveAccount = async () => {
     setIsLoadingProfile(true)
     try {
+      // Update user profile via auth context (which will update both API and context)
       await updateProfile({
         full_name: fullName,
         display_name: displayName || undefined,
@@ -181,13 +182,13 @@ export default function SettingsPage() {
   const handleSaveFinancialProfile = async () => {
     setIsLoadingFinancial(true)
     try {
-      const updatedProfile = await profileService.updateProfile({
+      const updatedProfile = await financialProfileService.updateProfile({
         occupation: occupation || undefined,
         industry: industry || undefined,
         monthly_income_avg: monthlyIncome ? parseFloat(monthlyIncome) : undefined,
-        risk_tolerance: riskTolerance as any,
-        investment_horizon: investmentHorizon as any,
-        budget_method: budgetMethod as any,
+        risk_tolerance: riskTolerance,
+        investment_horizon: investmentHorizon,
+        budget_method: budgetMethod,
       })
       
       setProfile(updatedProfile)

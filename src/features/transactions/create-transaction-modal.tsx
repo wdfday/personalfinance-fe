@@ -4,9 +4,9 @@ import { useState, useEffect } from "react"
 import { useAppDispatch, useAppSelector } from "@/lib/hooks"
 import { createTransaction } from "@/features/transactions/transactionsSlice"
 import { fetchAccounts } from "@/features/accounts/accountsSlice"
-import { fetchGoals } from "@/features/goals/goalsSlice"
 import { fetchBudgets } from "@/features/budgets/budgetsSlice"
 import { fetchDebts } from "@/features/debts/debtsSlice"
+import { fetchIncomeProfiles } from "@/features/income/incomeSlice"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,7 +14,6 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { TransactionLinkSelector } from "@/features/transactions/components/transaction-link-selector"
-import { TransactionTagsInput } from "@/features/transactions/components/transaction-tags-input"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
@@ -36,8 +35,6 @@ const createTransactionSchema = z.object({
   userNote: z.string().max(1000).optional(),
   counterpartyName: z.string().optional(),
   userCategoryId: z.string().optional(),
-  isTransfer: z.boolean().optional(),
-  tags: z.array(z.string()).optional(),
   links: z.array(z.object({ type: z.string(), id: z.string() })).optional(),
 })
 
@@ -51,19 +48,15 @@ interface CreateTransactionModalProps {
 export function CreateTransactionModal({ isOpen, onClose }: CreateTransactionModalProps) {
   const dispatch = useAppDispatch()
   const { accounts = [] } = useAppSelector((state) => state.accounts)
-  const { goals = [] } = useAppSelector((state) => state.goals)
   const { budgets = [] } = useAppSelector((state) => state.budgets)
   const { debts = [] } = useAppSelector((state) => state.debts)
+  const { items: incomeProfiles = [] } = useAppSelector((state) => state.income)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [selectedLinks, setSelectedLinks] = useState<TransactionLink[]>([])
-  const [tags, setTags] = useState<string[]>([])
 
   useEffect(() => {
     if (accounts.length === 0) {
       dispatch(fetchAccounts())
-    }
-    if (goals.length === 0) {
-      dispatch(fetchGoals())
     }
     if (budgets.length === 0) {
       dispatch(fetchBudgets())
@@ -71,7 +64,10 @@ export function CreateTransactionModal({ isOpen, onClose }: CreateTransactionMod
     if (debts.length === 0) {
       dispatch(fetchDebts())
     }
-  }, [dispatch, accounts.length, goals.length, budgets.length, debts.length])
+    if (incomeProfiles.length === 0) {
+      dispatch(fetchIncomeProfiles())
+    }
+  }, [dispatch, accounts.length, budgets.length, debts.length, incomeProfiles.length])
 
   const {
     register,
@@ -92,7 +88,6 @@ export function CreateTransactionModal({ isOpen, onClose }: CreateTransactionMod
       bookingDate: new Date().toISOString().split('T')[0],
       description: "",
       userNote: "",
-      isTransfer: false,
     },
   })
 
@@ -103,6 +98,11 @@ export function CreateTransactionModal({ isOpen, onClose }: CreateTransactionMod
     try {
       setIsSubmitting(true)
 
+      // Convert date string (YYYY-MM-DD) to ISO 8601 format with timezone
+      const bookingDateISO = data.bookingDate 
+        ? new Date(data.bookingDate + 'T00:00:00').toISOString()
+        : new Date().toISOString()
+
       const payload: CreateTransactionRequest = {
         accountId: data.accountId,
         direction: data.direction as TransactionDirection,
@@ -110,13 +110,11 @@ export function CreateTransactionModal({ isOpen, onClose }: CreateTransactionMod
         source: data.source as TransactionSource,
         amount: data.amount,
         currency: data.currency,
-        bookingDate: data.bookingDate,
+        bookingDate: bookingDateISO,
         description: data.description,
         userNote: data.userNote,
         counterpartyName: data.counterpartyName,
         userCategoryId: data.userCategoryId || undefined,
-        isTransfer: data.isTransfer,
-        tags: tags.length > 0 ? tags : undefined,
         links: selectedLinks.length > 0 ? selectedLinks : undefined,
       }
 
@@ -124,7 +122,6 @@ export function CreateTransactionModal({ isOpen, onClose }: CreateTransactionMod
       toast.success("Tạo giao dịch thành công!")
       reset()
       setSelectedLinks([])
-      setTags([])
       onClose()
     } catch (error) {
       toast.error("Lỗi tạo giao dịch: " + error)
@@ -136,7 +133,6 @@ export function CreateTransactionModal({ isOpen, onClose }: CreateTransactionMod
   const handleClose = () => {
     reset()
     setSelectedLinks([])
-    setTags([])
     onClose()
   }
 
@@ -303,22 +299,19 @@ export function CreateTransactionModal({ isOpen, onClose }: CreateTransactionMod
             <TransactionLinkSelector
               value={selectedLinks}
               onChange={setSelectedLinks}
-              goals={goals.map(g => ({ id: g.id, name: g.name }))}
-              budgets={budgets.map(b => ({ id: b.id, name: b.name }))}
+              budgets={budgets.filter(b => b.status !== 'ended').map(b => ({ id: b.id, name: b.name }))}
               debts={debts.map(d => ({ id: d.id, name: d.name }))}
+              incomeProfiles={incomeProfiles.map(i => ({ 
+                id: i.id, 
+                name: i.source || i.description || `Income ${i.id.slice(0, 8)}` 
+              }))}
+              direction={direction}
             />
             <p className="text-xs text-muted-foreground">
-              Liên kết transaction với Goal, Budget, hoặc Debt
+              {direction === "CREDIT" 
+                ? "Liên kết transaction với Income Profile"
+                : "Liên kết transaction với Budget hoặc Debt"}
             </p>
-          </div>
-
-          {/* Tags */}
-          <div className="space-y-2">
-            <Label>Tags</Label>
-            <TransactionTagsInput
-              value={tags}
-              onChange={setTags}
-            />
           </div>
 
           <div className="flex justify-end space-x-2 pt-4">

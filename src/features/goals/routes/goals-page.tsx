@@ -20,10 +20,12 @@ import { useToast } from "@/hooks/use-toast"
 // import { GoalPrioritizationModal } from "@/features/goals/components/goal-prioritization-modal"
 import { CreateGoalModal } from "@/features/goals/components/create-goal-modal"
 import { EditGoalModal } from "@/features/goals/components/edit-goal-modal"
+import { useRouter } from "next/navigation"
 // import { goalPrioritizationService } from "@/services/api/services/goal-prioritization.service"
 import type { Goal } from "@/services/api/types/goals"
 
 export default function GoalsPage() {
+  const router = useRouter()
   const dispatch = useAppDispatch()
   const { goals, isLoading, error } = useAppSelector((state) => state.goals)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
@@ -231,7 +233,14 @@ export default function GoalsPage() {
                     )}
                   </div>
 
-                  <div className="flex justify-end pt-2">
+                  <div className="flex justify-end pt-2 gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => router.push(`/goals/${goal.id}`)}
+                    >
+                      View Details
+                    </Button>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button size="sm" variant="ghost">

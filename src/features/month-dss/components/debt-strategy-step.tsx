@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Skeleton } from "@/components/ui/skeleton"
 import { previewDebtStrategy, applyDebtStrategy } from "../dssWorkflowSlice"
-import { AlertCircle, CheckCircle2, TrendingDown, Calendar, DollarSign } from "lucide-react"
+import { AlertCircle, CheckCircle2, TrendingDown, Calendar, DollarSign, ChevronDown, ChevronUp } from "lucide-react"
 
 interface Debt {
   id: string
@@ -38,6 +38,7 @@ export function DebtStrategyStep({
   const dispatch = useAppDispatch()
   const { debtStrategy } = useAppSelector(state => state.dssWorkflow)
   const [selectedStrategy, setSelectedStrategy] = useState<string | null>(null)
+  const [expandedStrategies, setExpandedStrategies] = useState<Set<string>>(new Set())
 
   const handlePreview = async () => {
     await dispatch(previewDebtStrategy({
@@ -91,18 +92,14 @@ export function DebtStrategyStep({
           <CardTitle>Debt Overview</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground">Total Debt</p>
-              <p className="text-2xl font-bold">${totalDebt.toLocaleString()}</p>
+              <p className="text-2xl font-bold">{totalDebt.toLocaleString('vi-VN')} đ</p>
             </div>
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground">Min. Payment</p>
-              <p className="text-2xl font-bold">${totalMinPayment.toLocaleString()}</p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm text-muted-foreground">Monthly Budget</p>
-              <p className="text-2xl font-bold text-primary">${totalDebtBudget.toLocaleString()}</p>
+              <p className="text-2xl font-bold">{totalMinPayment.toLocaleString('vi-VN')} đ</p>
             </div>
           </div>
 
@@ -177,69 +174,163 @@ export function DebtStrategyStep({
             </Badge>
           </div>
 
-          <div className="grid gap-4">
-            {debtStrategy.preview.scenarios.map((scenario) => {
+          {/* Reasoning and Key Facts */}
+          {(debtStrategy.preview.reasoning || debtStrategy.preview.key_facts?.length) && (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                {debtStrategy.preview.reasoning && (
+                  <p className="font-semibold mb-2">{debtStrategy.preview.reasoning}</p>
+                )}
+                {debtStrategy.preview.key_facts && debtStrategy.preview.key_facts.length > 0 && (
+                  <ul className="list-disc list-inside space-y-1 text-sm">
+                    {debtStrategy.preview.key_facts.map((fact, idx) => (
+                      <li key={idx}>{fact}</li>
+                    ))}
+                  </ul>
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {debtStrategy.preview.strategy_comparison
+              .filter((scenario) => scenario.strategy === 'avalanche' || scenario.strategy === 'snowball')
+              .map((scenario) => {
               const isRecommended = scenario.strategy === debtStrategy.preview?.recommended_strategy
               const isSelected = selectedStrategy === scenario.strategy
+              const isExpanded = expandedStrategies.has(scenario.strategy)
+              const paymentPlans = scenario.payment_plans || []
+
+              const toggleExpand = (e: React.MouseEvent) => {
+                e.stopPropagation()
+                const newExpanded = new Set(expandedStrategies)
+                if (isExpanded) {
+                  newExpanded.delete(scenario.strategy)
+                } else {
+                  newExpanded.add(scenario.strategy)
+                }
+                setExpandedStrategies(newExpanded)
+              }
+
+              const strategyName = scenario.strategy === 'avalanche' ? 'Avalanche' : 'Snowball'
 
               return (
                 <Card
                   key={scenario.strategy}
-                  className={`cursor-pointer transition-all ${
-                    isSelected ? 'ring-2 ring-primary' : ''
-                  } ${isRecommended ? 'border-primary' : ''}`}
+                  className={`transition-all cursor-pointer ${
+                    isSelected ? 'ring-2 ring-primary shadow-md' : ''
+                  } ${isRecommended ? 'border-primary border-2' : ''}`}
                   onClick={() => setSelectedStrategy(scenario.strategy)}
                 >
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <CardTitle className="flex items-center gap-2">
-                          {scenario.strategy.charAt(0).toUpperCase() + scenario.strategy.slice(1)}
-                          {isRecommended && (
-                            <Badge variant="default">Recommended</Badge>
-                          )}
-                          {isSelected && (
-                            <CheckCircle2 className="h-5 w-5 text-primary" />
-                          )}
-                        </CardTitle>
-                        <CardDescription className="mt-1">
-                          {scenario.strategy === 'avalanche' && 'Pay highest interest rate first'}
-                          {scenario.strategy === 'snowball' && 'Pay smallest balance first'}
-                          {scenario.strategy === 'hybrid' && 'Balanced approach'}
-                        </CardDescription>
+                  <CardContent className="py-4 space-y-3">
+                    {/* Strategy Name */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-base">{strategyName}</h3>
+                        {isRecommended && (
+                          <Badge variant="secondary" className="text-xs">Rec</Badge>
+                        )}
+                      </div>
+                      {isSelected && (
+                        <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0" />
+                      )}
+                    </div>
+
+                    {/* Metrics - improved layout */}
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between items-center">
+                        <span className="text-muted-foreground">Phân bổ/tháng:</span>
+                        <span className="font-bold text-primary">
+                          {(scenario.monthly_allocation || 0).toLocaleString('vi-VN')} ₫
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-muted-foreground">Interest:</span>
+                        <span className="font-semibold">{scenario.total_interest.toLocaleString('vi-VN')} ₫</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-muted-foreground">Thời gian:</span>
+                        <span className="font-semibold">{scenario.months} tháng</span>
                       </div>
                     </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-3 gap-4 text-sm">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-1 text-muted-foreground">
-                          <DollarSign className="h-3 w-3" />
-                          <span>Total Interest</span>
-                        </div>
-                        <p className="text-lg font-bold">
-                          ${scenario.total_interest.toLocaleString()}
-                        </p>
+
+                    {/* Debt breakdown - hiển thị phân bổ từng debt */}
+                    {paymentPlans.length > 0 && (
+                      <div className="pt-3 border-t space-y-2">
+                        <div className="text-muted-foreground font-medium text-sm mb-2">Phân bổ từng debt:</div>
+                        {paymentPlans.map((plan: any) => (
+                          <div key={plan.debt_id} className="flex justify-between items-center py-1">
+                            <span className="text-muted-foreground truncate flex-1 mr-2 text-sm" title={plan.debt_name}>
+                              {plan.debt_name}
+                            </span>
+                            <span className="font-semibold text-primary whitespace-nowrap text-sm">
+                              {(plan.monthly_payment || 0).toLocaleString('vi-VN')} ₫
+                            </span>
+                          </div>
+                        ))}
                       </div>
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-1 text-muted-foreground">
-                          <Calendar className="h-3 w-3" />
-                          <span>Time to Payoff</span>
-                        </div>
-                        <p className="text-lg font-bold">
-                          {scenario.months_to_debt_free} months
-                        </p>
+                    )}
+
+                    {/* View Plans button if available */}
+                    {paymentPlans.length > 0 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={toggleExpand}
+                        className="w-full text-xs h-8 mt-2"
+                      >
+                        {isExpanded ? (
+                          <>
+                            <ChevronUp className="h-3 w-3 mr-1" />
+                            Ẩn chi tiết
+                          </>
+                        ) : (
+                          <>
+                            <ChevronDown className="h-3 w-3 mr-1" />
+                            Xem chi tiết
+                          </>
+                        )}
+                      </Button>
+                    )}
+
+                    {/* Pros/Cons and Payment Plans - Expandable */}
+                    {isExpanded && (
+                      <div className="mt-3 pt-3 border-t space-y-3">
+                        <h4 className="font-semibold text-sm">Payment Plans:</h4>
+                        {paymentPlans.map((plan) => (
+                          <Card key={plan.debt_id} className="bg-muted/50">
+                            <CardContent className="pt-4">
+                              <div className="space-y-2">
+                                <div className="flex justify-between items-start">
+                                  <div>
+                                    <p className="font-semibold">{plan.debt_name}</p>
+                                    <p className="text-xs text-muted-foreground">Debt ID: {plan.debt_id}</p>
+                                  </div>
+                                  <Badge variant="outline">
+                                    Payoff: Month {plan.payoff_month}
+                                  </Badge>
+                                </div>
+                                <div className="grid grid-cols-3 gap-2 text-xs">
+                                  <div>
+                                    <p className="text-muted-foreground">Monthly Payment</p>
+                                    <p className="font-semibold">{plan.monthly_payment.toLocaleString('vi-VN')} ₫</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-muted-foreground">Extra Payment</p>
+                                    <p className="font-semibold text-primary">{plan.extra_payment.toLocaleString('vi-VN')} ₫</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-muted-foreground">Total Interest</p>
+                                    <p className="font-semibold">{plan.total_interest.toLocaleString('vi-VN')} ₫</p>
+                                  </div>
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
                       </div>
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-1 text-muted-foreground">
-                          <TrendingDown className="h-3 w-3" />
-                          <span>Monthly Payment</span>
-                        </div>
-                        <p className="text-lg font-bold">
-                          ${scenario.monthly_payment.toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
+                    )}
                   </CardContent>
                 </Card>
               )

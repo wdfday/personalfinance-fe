@@ -67,7 +67,7 @@ export interface AllocationScenario {
   id: string
   name: string
   description: string
-  type: 'conservative' | 'balanced' | 'aggressive'
+  type: 'safe' | 'balanced'
   total_allocated: number
   total_mandatory: number
   total_flexible: number
@@ -138,7 +138,7 @@ export interface GenerateAllocationRequest {
 
 export interface ExecuteAllocationRequest {
   user_id: string
-  scenario_type: 'conservative' | 'balanced' | 'aggressive'
+  scenario_type: 'safe' | 'balanced'
   year: number
   month: number
 }

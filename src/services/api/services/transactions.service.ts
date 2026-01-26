@@ -10,7 +10,20 @@ import type {
 
 export const transactionsService = {
   async getAll(filters?: TransactionFilters): Promise<TransactionListResponse> {
-    const queryString = filters ? apiClient.buildQueryString(filters as unknown as Record<string, unknown>) : ''
+    // Map start_date -> startBookingDate, end_date -> endBookingDate để match với API
+    const mappedFilters: Record<string, unknown> = {}
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (key === 'start_date') {
+          mappedFilters['startBookingDate'] = value
+        } else if (key === 'end_date') {
+          mappedFilters['endBookingDate'] = value
+        } else {
+          mappedFilters[key] = value
+        }
+      })
+    }
+    const queryString = filters ? apiClient.buildQueryString(mappedFilters) : ''
     return apiClient.get<TransactionListResponse>(`/transactions${queryString}`)
   },
 

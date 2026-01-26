@@ -2,49 +2,73 @@ import { apiClient } from '../client';
 
 // ==================== Types ====================
 
-export interface AutoScoringRequest {
-  month_id: string;
-  monthly_income: number; // REQUIRED for feasibility calculation
+// Initialize DSS - MUST be called first before any preview/apply
+export interface InitializeDSSRequest {
+  monthly_income: number;
   goals: Array<{
-    id: string; // Changed from goal_id to match backend DTO
+    id: string;
     name: string;
     target_amount: number;
     current_amount: number;
     target_date?: string;
-    type: string; // REQUIRED by backend: savings, debt, investment, purchase, emergency, retirement, education, other
-    priority: string;
+    type: string;
+    priority?: string;
   }>;
-}
-
-export interface GoalPrioritizationRequest {
-  month_id: string;
-  criteria_ratings?: Record<string, number>; // Custom criteria ratings (1-10 scale)
-  goals: Array<{
-    id: string; // Changed from goal_id to match backend GoalForRating DTO
-    name: string;
-    target_amount: number;
-    current_amount: number; // REQUIRED by backend
-    target_date: string; // Changed from deadline to match backend
-    type: string; // REQUIRED by backend: savings, debt, investment, purchase, emergency, retirement, education, other
-    priority: string;
-    // Optional auto-scoring overrides
-    feasibility_score?: number;
-    impact_score?: number;
-    importance_score?: number;
-    urgency_score?: number;
-  }>;
-}
-
-export interface DebtStrategyRequest {
-  month_id: string;
   debts: Array<{
-    debt_id: string;
+    id: string;
     name: string;
     current_balance: number;
     interest_rate: number;
     minimum_payment: number;
+    behavior?: string; // "revolving", "installment", "interest_only"
   }>;
-  total_debt_budget: number;
+  constraints: Array<{
+    id: string;
+    name: string;
+    category_id: string;
+    minimum_amount: number;
+    maximum_amount?: number;
+    is_flexible: boolean;
+    priority?: number;
+  }>;
+}
+
+export interface InitializeDSSResponse {
+  month_id: string;
+  status: string;
+  expires_in: string;
+  message: string;
+  goal_count: number;
+  debt_count: number;
+  constraint_count: number;
+  monthly_income: number;
+}
+
+// Step 0: Auto-Scoring (no body needed - reads from cache)
+export interface AutoScoringRequest {
+  month_id: string;
+  // Optional: Thử số tiền cấp phát cho goals để tính toán scoring với context budget
+  // Nếu có, sẽ dùng để adjust MonthlyIncome context (ví dụ: goal_allocation_pct = 60% => dùng 60% income)
+  goal_allocation_pct?: number; // 0-100, optional
+  // Goals and income read from Redis cache
+}
+
+// Step 1: Goal Prioritization (criteria_weights preferred, criteria_ratings as fallback)
+export interface GoalPrioritizationRequest {
+  month_id: string;
+  criteria_weights?: Record<string, number>; // Direct criteria weights (0-1 scale, preferred)
+  criteria_ratings?: Record<string, number>; // Custom criteria ratings (1-10 scale, fallback)
+  // Goals read from Redis cache
+}
+
+// Step 2: Debt Strategy (only strategy needed)
+export interface DebtStrategyRequest {
+  month_id: string;
+  preferred_strategy?: 'avalanche' | 'snowball' | 'hybrid';
+  // Optional: Thử số tiền cấp phát cho goal/debt để tính toán debt strategy với budget constraint
+  goal_allocation_pct?: number; // 0-100, optional
+  debt_allocation_pct?: number; // 0-100, optional
+  // Debts read from Redis cache
 }
 
 // Step 3 Preview: Only preferences (backend collects Goals & Debts from Step 1 & 2)
@@ -65,23 +89,24 @@ export interface ApplyGoalDebtTradeoffRequest {
   debt_allocation_percent: number;
 }
 
-// Step 4 Preview: Constraints + allocation % from Step 3
-// (Backend collects Goals & Debts from Step 1 & 2)
+// Scenario Parameters Override
+export interface ScenarioParametersOverride {
+  scenario_type: 'safe' | 'balanced';
+  goal_contribution_factor?: number; // 0.0-2.0, multiplier for goal contributions
+  flexible_spending_level?: number; // 0.0-1.0, 0 = minimum, 1 = maximum
+  emergency_fund_percent?: number; // 0.0-1.0, % of surplus to emergency fund
+  goals_percent?: number; // 0.0-1.0, % of surplus to goals
+  flexible_percent?: number; // 0.0-1.0, % of surplus to flexible spending
+}
+
+// Step 3 Preview: Only allocation percentages (reads from cache)
+// Note: Step 3 is now Budget Allocation (tradeoff step removed)
 export interface PreviewBudgetAllocationRequest {
   month_id: string;
-  total_income: number;
-  goal_allocation_pct: number; // From Step 3
-  debt_allocation_pct: number; // From Step 3
-  constraints: Array<{
-    category_id: string;
-    category_name: string;
-    min_amount: number;
-    max_amount?: number;
-    flexibility: 'fixed' | 'flexible' | 'discretionary';
-    priority: number;
-    is_ad_hoc: boolean;
-    description?: string;
-  }>;
+  goal_allocation_pct: number; // User-defined or default
+  debt_allocation_pct: number; // User-defined or default
+  scenario_overrides?: ScenarioParametersOverride[]; // Optional: custom scenario parameters
+  // Constraints, goals, debts read from Redis cache
 }
 
 export interface ApplyGoalPrioritizationRequest {
@@ -155,6 +180,11 @@ export interface FinalizeDSSResponse {
 // ==================== API Service ====================
 
 export const dssWorkflowService = {
+  // ==================== Initialize DSS (MUST call first) ====================
+  
+  initializeDSS: (monthStr: string, data: InitializeDSSRequest): Promise<InitializeDSSResponse> =>
+    apiClient.post(`/months/${monthStr}/dss/initialize`, data),
+
   // ==================== Preview Endpoints ====================
   
   previewAutoScoring: (monthStr: string, data: AutoScoringRequest) =>
@@ -164,10 +194,10 @@ export const dssWorkflowService = {
     apiClient.post(`/months/${monthStr}/goal-prioritization/preview`, data),
 
   previewDebtStrategy: (monthStr: string, data: DebtStrategyRequest) =>
-    apiClient.post(`/months/${monthStr}/debt-strategy/preview`, data),
+    apiClient.post(`/months/${monthStr}/dss/debt-strategy/preview`, data),
 
-  previewGoalDebtTradeoff: (monthStr: string, data: PreviewGoalDebtTradeoffRequest) =>
-    apiClient.post(`/months/${monthStr}/goal-debt-tradeoff/preview`, data),
+  // Step 3 tradeoff removed - no longer available
+  // previewGoalDebtTradeoff: removed
 
   previewBudgetAllocation: (monthStr: string, data: PreviewBudgetAllocationRequest) =>
     apiClient.post(`/months/${monthStr}/budget-allocation/preview`, data),
@@ -178,10 +208,10 @@ export const dssWorkflowService = {
     apiClient.post(`/months/${monthStr}/goal-prioritization/apply`, data),
 
   applyDebtStrategy: (monthStr: string, data: ApplyDebtStrategyRequest) =>
-    apiClient.post(`/months/${monthStr}/debt-strategy/apply`, data),
+    apiClient.post(`/months/${monthStr}/dss/debt-strategy/apply`, data),
 
-  applyGoalDebtTradeoff: (monthStr: string, data: ApplyGoalDebtTradeoffRequest) =>
-    apiClient.post(`/months/${monthStr}/goal-debt-tradeoff/apply`, data),
+  // Step 3 tradeoff removed - no longer available
+  // applyGoalDebtTradeoff: removed
 
   applyBudgetAllocation: (monthStr: string, data: ApplyBudgetAllocationRequest) =>
     apiClient.post(`/months/${monthStr}/budget-allocation/apply`, data),

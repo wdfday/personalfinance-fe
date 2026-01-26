@@ -1,8 +1,9 @@
 "use client"
 
-import { useState } from "react"
-import { useAppDispatch } from "@/lib/hooks"
+import { useState, useEffect } from "react"
+import { useAppDispatch, useAppSelector } from "@/lib/hooks"
 import { createConstraint } from "@/features/budget-constraints/budgetConstraintsSlice"
+import { fetchCategories } from "@/features/categories/categoriesSlice"
 import { BudgetPeriod } from "@/types/api"
 import {
     Dialog,
@@ -23,6 +24,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
+import { CategoryPickerPopover } from "@/components/categories/category-picker-popover"
 
 interface CreateConstraintModalProps {
     open: boolean
@@ -36,7 +38,16 @@ export function CreateConstraintModal({
     onSuccess,
 }: CreateConstraintModalProps) {
     const dispatch = useAppDispatch()
+    const { categories } = useAppSelector((state) => state.categories)
     const [isSubmitting, setIsSubmitting] = useState(false)
+
+    // Fetch categories when modal opens
+    useEffect(() => {
+        if (open && categories.length === 0) {
+            dispatch(fetchCategories())
+        }
+    }, [open, categories.length, dispatch])
+
 
     const [formData, setFormData] = useState({
         category_id: "",
@@ -100,13 +111,12 @@ export function CreateConstraintModal({
                 <form onSubmit={handleSubmit} className="space-y-6">
                     {/* Category */}
                     <div className="grid gap-2">
-                        <Label htmlFor="category_id">Category ID *</Label>
-                        <Input
-                            id="category_id"
-                            placeholder="Enter category UUID"
+                        <Label htmlFor="category_id">Category *</Label>
+                        <CategoryPickerPopover
+                            categories={categories}
                             value={formData.category_id}
-                            onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
-                            required
+                            onChange={(categoryId) => setFormData({ ...formData, category_id: categoryId })}
+                            placeholder="Chọn danh mục..."
                         />
                         <p className="text-xs text-muted-foreground">
                             The category this constraint applies to (e.g., Food, Rent, Transport)

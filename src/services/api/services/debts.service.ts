@@ -4,7 +4,13 @@ import type { Debt, CreateDebtRequest, UpdateDebtRequest, DebtSummary } from '..
 
 export const debtsService = {
   async getAll(): Promise<{ debts: Debt[]; total: number }> {
-    return apiClient.get('/debts')
+    // API trả về dạng { status, message, data: Debt[] }
+    const data = await apiClient.get<Debt[]>('/debts')
+    const debts = Array.isArray(data) ? data : (data as any)?.debts || []
+    return {
+      debts,
+      total: debts.length,
+    }
   },
 
   async getById(id: string): Promise<Debt> {

@@ -37,7 +37,7 @@ export function RevenueChart() {
   }
 
   return (
-    <ResponsiveContainer width="100%" height={350}>
+    <ResponsiveContainer width={600} height={350} minWidth={0}>
       <LineChart data={data} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
         <XAxis
           dataKey="month"

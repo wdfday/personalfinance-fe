@@ -177,8 +177,8 @@ export function DebtStrategyView() {
                           </div>
                       </div>
 
-                      <div className="h-[250px] w-full mt-4">
-                          <ResponsiveContainer width="100%" height="100%">
+                      <div className="w-full mt-4" style={{ minHeight: 250 }}>
+                          <ResponsiveContainer width={600} height={250} minWidth={0}>
                               <LineChart data={simulationResult.timeline}>
                                   <CartesianGrid strokeDasharray="3 3" />
                                   <XAxis dataKey="month" label={{ value: 'Month', position: 'insideBottomRight', offset: -5 }} />

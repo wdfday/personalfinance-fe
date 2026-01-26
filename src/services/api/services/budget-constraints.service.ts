@@ -6,6 +6,7 @@ import type {
   UpdateBudgetConstraintRequest,
   BudgetConstraintListResponse,
   BudgetConstraintSummary,
+  BudgetConstraintWithHistoryResponse,
 } from '../types/budget-constraints'
 
 export const budgetConstraintsService = {
@@ -15,6 +16,10 @@ export const budgetConstraintsService = {
 
   async getById(id: string): Promise<BudgetConstraint> {
     return apiClient.get<BudgetConstraint>(`/budget-constraints/${id}`)
+  },
+
+  async getHistory(id: string): Promise<BudgetConstraintWithHistoryResponse> {
+    return apiClient.get<BudgetConstraintWithHistoryResponse>(`/budget-constraints/${id}/history`)
   },
 
   async getByCategory(categoryId: string): Promise<BudgetConstraint> {
@@ -29,8 +34,12 @@ export const budgetConstraintsService = {
     return apiClient.put<BudgetConstraint>(`/budget-constraints/${id}`, data)
   },
 
-  async delete(id: string): Promise<void> {
-    return apiClient.delete(`/budget-constraints/${id}`)
+  async archive(id: string): Promise<void> {
+    return apiClient.post(`/budget-constraints/${id}/archive`)
+  },
+
+  async end(id: string): Promise<BudgetConstraint> {
+    return apiClient.post<BudgetConstraint>(`/budget-constraints/${id}/end`)
   },
 
   async getSummary(): Promise<BudgetConstraintSummary> {

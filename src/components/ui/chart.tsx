@@ -38,11 +38,15 @@ const ChartContainer = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<'div'> & {
     config: ChartConfig
+    /** Fixed width for ResponsiveContainer; avoids width(-1)/height(-1) when using 100%. */
+    chartWidth?: number
+    /** Fixed height for ResponsiveContainer. */
+    chartHeight?: number
     children: React.ComponentProps<
       typeof RechartsPrimitive.ResponsiveContainer
     >['children']
   }
->(({ id, className, children, config, ...props }, ref) => {
+>(({ id, className, children, config, chartWidth, chartHeight, ...props }, ref) => {
   const uniqueId = React.useId()
   const chartId = `chart-${id || uniqueId.replace(/:/g, '')}`
 
@@ -58,7 +62,11 @@ const ChartContainer = React.forwardRef<
         {...props}
       >
         <ChartStyle id={chartId} config={config} />
-        <RechartsPrimitive.ResponsiveContainer>
+        <RechartsPrimitive.ResponsiveContainer 
+          width={chartWidth ?? "100%"} 
+          height={chartHeight ?? "100%"}
+          minWidth={0}
+        >
           {children}
         </RechartsPrimitive.ResponsiveContainer>
       </div>

@@ -1,13 +1,11 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useMemo } from "react"
 import { useTranslation } from "@/contexts/i18n-context"
+import { useAppSelector } from "@/lib/hooks"
 import { type Category } from "@/services/api"
-import { transactionsService, budgetsService } from '@/services/api'
 import { 
-  type Transaction, 
-  type Budget, 
-  type TransactionListResponse 
+  type Transaction
 } from "@/types/api"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 
@@ -23,10 +21,7 @@ import {
 } from "@/components/ui/table"
 import { format } from "date-fns"
 import { 
-  Loader2, 
-  TrendingUp, 
-  TrendingDown, 
-  Wallet
+  TrendingUp
 } from "lucide-react"
 
 interface CategoryDetailViewProps {
@@ -35,14 +30,42 @@ interface CategoryDetailViewProps {
 
 export function CategoryDetailView({ category }: CategoryDetailViewProps) {
   const { t } = useTranslation("categories")
-  
-  // Local state for fetched data
-  const [transactions, setTransactions] = useState<Transaction[]>([])
-  const [budgets, setBudgets] = useState<Budget[]>([])
-  const [isLoadingFn, setIsLoadingFn] = useState({
-    transactions: false,
-    budgets: false
-  })
+  const { categories: allCategories = [] } = useAppSelector((state) => state.categories)
+  const { transactions: allTransactions = [] } = useAppSelector((state) => state.transactions)
+
+  // Get all child category IDs recursively
+  const getAllChildCategoryIds = useMemo(() => {
+    const getChildren = (parentId: string): string[] => {
+      const children = allCategories.filter(cat => cat.parent_id === parentId)
+      const childIds = children.map(cat => cat.id)
+      // Recursively get grandchildren
+      const grandChildIds = children.flatMap(child => getChildren(child.id))
+      return [...childIds, ...grandChildIds]
+    }
+    return getChildren(category.id)
+  }, [category.id, allCategories])
+
+  // All category IDs to filter (current + children)
+  const categoryIdsToFilter = useMemo(() => {
+    return [category.id, ...getAllChildCategoryIds]
+  }, [category.id, getAllChildCategoryIds])
+
+  // Filter transactions from Redux by category IDs
+  const transactions = useMemo(() => {
+    return allTransactions
+      .filter(tx => {
+        // Check if transaction has categoryId that matches any of our category IDs
+        const txCategoryId = tx.categoryId || tx.category_id || tx.userCategoryId
+        return txCategoryId && categoryIdsToFilter.includes(txCategoryId)
+      })
+      .sort((a, b) => {
+        // Sort by date (newest first)
+        const dateA = new Date(a.bookingDate || a.date || a.createdAt || 0).getTime()
+        const dateB = new Date(b.bookingDate || b.date || b.createdAt || 0).getTime()
+        return dateB - dateA
+      })
+      .slice(0, 50) // Limit to 50 most recent
+  }, [allTransactions, categoryIdsToFilter])
 
   // Format currency helper
   const formatCurrency = (amount: number, currency: string = "VND") => {
@@ -51,48 +74,6 @@ export function CategoryDetailView({ category }: CategoryDetailViewProps) {
       currency: currency || "VND",
     }).format(amount)
   }
-
-  // Fetch data when category changes
-  useEffect(() => {
-    // Reset state when category changes
-    setTransactions([])
-    setBudgets([])
-    
-    const fetchTransactions = async () => {
-      setIsLoadingFn(prev => ({ ...prev, transactions: true }))
-      try {
-        const response = await transactionsService.getTransactions({
-          categoryId: category.id,
-          pageSize: 10, // Limit to recent 10
-          page: 1
-        })
-        setTransactions(response.transactions || [])
-      } catch (error) {
-        console.error("Failed to fetch transactions for category:", error)
-      } finally {
-        setIsLoadingFn(prev => ({ ...prev, transactions: false }))
-      }
-    }
-
-    const fetchBudgets = async () => {
-      setIsLoadingFn(prev => ({ ...prev, budgets: true }))
-      try {
-        const response = await budgetsService.getBudgets({
-          category_id: category.id,
-          status: 'active'
-        })
-        setBudgets(response.items || []) // Assuming items or data based on response
-      } catch (error) {
-        console.error("Failed to fetch budgets for category:", error)
-      } finally {
-        setIsLoadingFn(prev => ({ ...prev, budgets: false }))
-      }
-    }
-
-    fetchTransactions()
-    fetchBudgets()
-
-  }, [category.id])
 
   const getTypeBadgeClass = (type: string) => {
     const map: Record<string, string> = {
@@ -110,18 +91,15 @@ export function CategoryDetailView({ category }: CategoryDetailViewProps) {
         <div className="flex items-start justify-between">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              {category.icon && (
+              {/* {category.icon && (
                 <span className="material-symbols-rounded text-2xl">{category.icon}</span>
-              )}
+              )} */}
               <h2 className="text-2xl font-bold tracking-tight">{category.name}</h2>
             </div>
             <div className="flex items-center gap-2">
               <Badge className={getTypeBadgeClass(category.type)}>
                 {t(`types.${category.type}`, { defaultValue: category.type })}
               </Badge>
-              {category.is_system && (
-                <Badge variant="outline">System</Badge>
-              )}
             </div>
           </div>
         </div>
@@ -135,8 +113,8 @@ export function CategoryDetailView({ category }: CategoryDetailViewProps) {
         )}
       </div>
 
-      {/* Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 min-h-0">
+      {/* Content - Single Column for Transactions */}
+      <div className="flex-1 min-h-0">
         
         {/* Transactions Column */}
         <div className="flex flex-col space-y-4 h-full">
@@ -146,11 +124,7 @@ export function CategoryDetailView({ category }: CategoryDetailViewProps) {
             </h3>
             <Card className="flex-1 border-0 shadow-none bg-transparent">
               <CardContent className="p-0 h-full">
-                {isLoadingFn.transactions ? (
-                   <div className="flex h-40 items-center justify-center">
-                     <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                   </div>
-                ) : transactions.length > 0 ? (
+                {transactions.length > 0 ? (
                   <ScrollArea className="h-[calc(100vh-350px)] rounded-md border">
                     <Table>
                       <TableHeader>
@@ -186,68 +160,6 @@ export function CategoryDetailView({ category }: CategoryDetailViewProps) {
                 ) : (
                   <div className="flex h-40 items-center justify-center text-muted-foreground bg-muted/20 rounded-lg border border-dashed">
                     No transactions found for this category.
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-        </div>
-
-        {/* Budgets Column */}
-        <div className="flex flex-col space-y-4 h-full">
-            <h3 className="text-lg font-semibold flex items-center gap-2">
-                <Wallet className="h-4 w-4" />
-                Active Budgets
-            </h3>
-            <Card className="flex-1 border-0 shadow-none bg-transparent">
-              <CardContent className="p-0">
-                {isLoadingFn.budgets ? (
-                   <div className="flex h-40 items-center justify-center">
-                     <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                   </div>
-                ) : budgets.length > 0 ? (
-                  <ScrollArea className="h-[calc(100vh-350px)] pr-4">
-                      <div className="grid gap-4">
-                        {budgets.map((budget) => (
-                        <Card key={budget.id}>
-                            <CardHeader className="pb-2">
-                            <div className="flex justify-between items-start">
-                                <CardTitle className="text-base">{budget.name}</CardTitle>
-                                <Badge variant={budget.status === 'active' ? 'default' : 'secondary'}>
-                                {budget.status}
-                                </Badge>
-                            </div>
-                            </CardHeader>
-                            <CardContent>
-                            <div className="space-y-2">
-                                <div className="flex justify-between text-sm">
-                                <span className="text-muted-foreground">Spent:</span>
-                                <span className="font-medium">{formatCurrency(budget.spent_amount, budget.currency)}</span>
-                                </div>
-                                <div className="flex justify-between text-sm">
-                                <span className="text-muted-foreground">Limit:</span>
-                                <span className="font-medium">{formatCurrency(budget.amount, budget.currency)}</span>
-                                </div>
-                                <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
-                                <div 
-                                    className={`h-full ${
-                                    budget.percentage_spent > 100 ? 'bg-red-500' : 
-                                    budget.percentage_spent > 85 ? 'bg-yellow-500' : 'bg-green-500'
-                                    }`}
-                                    style={{ width: `${Math.min(budget.percentage_spent, 100)}%` }}
-                                />
-                                </div>
-                                <div className="text-xs text-right text-muted-foreground">
-                                {budget.percentage_spent.toFixed(1)}% used
-                                </div>
-                            </div>
-                            </CardContent>
-                        </Card>
-                        ))}
-                      </div>
-                  </ScrollArea>
-                ) : (
-                  <div className="flex h-40 items-center justify-center text-muted-foreground bg-muted/20 rounded-lg border border-dashed">
-                    No active budgets linked to this category.
                   </div>
                 )}
               </CardContent>

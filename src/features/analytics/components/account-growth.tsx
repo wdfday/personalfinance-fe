@@ -32,7 +32,7 @@ export function AccountGrowth() {
   }
 
   return (
-    <ResponsiveContainer width="100%" height={350}>
+    <ResponsiveContainer width={600} height={350} minWidth={0}>
       <BarChart data={data}>
         <XAxis
           dataKey="month"

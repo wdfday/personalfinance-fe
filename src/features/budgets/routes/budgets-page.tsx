@@ -1,32 +1,29 @@
-
 "use client"
 
-
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
-import { useBudgets } from "@/hooks/use-budgets"
+import { useAppDispatch } from "@/lib/hooks"
+import { fetchTransactions } from "@/features/transactions/transactionsSlice"
 import { useCategories } from "@/hooks/use-categories"
 import { useBudgetConstraints } from "@/hooks/use-budget-constraints"
-import { transactionsService } from "@/services/api/services/transactions.service"
-import { Budget } from "@/services/api/types/budgets"
+import { useBudgets } from "@/hooks/use-budgets"
 import { BudgetConstraint } from "@/services/api/types/budget-constraints"
+import { Budget } from "@/services/api/types/budgets"
 import { Transaction } from "@/services/api/types/transactions"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
-import { Plus, Wallet, ArrowUpRight, TrendingUp, TrendingDown, History } from "lucide-react"
-import { formatCurrency, formatDate } from "@/lib/utils"
-import { BudgetCard } from "@/features/budgets/components/budget-card"
+import { Plus, ArchiveRestore, Wallet, TrendingUp, Target } from "lucide-react"
 import { ConstraintCard } from "@/features/budget-constraints/components/constraint-card"
-import { CreateBudgetModal } from "@/features/budgets/components/create-budget-modal"
+import { ConstraintDetail } from "@/features/budget-constraints/components/constraint-detail"
+import { ConstraintStats } from "@/features/budget-constraints/components/constraint-stats"
+import { OtherItemsView } from "@/features/budget-constraints/components/other-items-view"
+import { BudgetDetail } from "@/features/budgets/components/budget-detail"
+import { BudgetCharts } from "@/features/budgets/components/budget-charts"
 import { CreateConstraintModal } from "@/features/budget-constraints/components/create-constraint-modal"
+import { EditConstraintModal } from "@/features/budget-constraints/components/edit-constraint-modal"
+import { CreateBudgetModal } from "@/features/budgets/components/create-budget-modal"
+import { transactionsService } from "@/services/api/services/transactions.service"
 
-export default function UnifiedBudgetsPage() {
-  const router = useRouter()
-  
-  // Use custom hooks
-  const { budgets, isLoading: budgetsLoading, refreshBudgets, removeBudget } = useBudgets()
+export default function BudgetsPage() {
+  const dispatch = useAppDispatch()
   const { categories, refreshCategories } = useCategories()
   const { 
       constraints, 
@@ -34,355 +31,280 @@ export default function UnifiedBudgetsPage() {
       isLoading: constraintsLoading, 
       refreshConstraints, 
       refreshSummary,
-      removeConstraint 
+      endConstraint,
+      editConstraint
   } = useBudgetConstraints()
+  const { budgets, refreshBudgets, isLoading: budgetsLoading } = useBudgets()
 
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [isCreateBudgetModalOpen, setIsCreateBudgetModalOpen] = useState(false)
-  const [isCreateConstraintModalOpen, setIsCreateConstraintModalOpen] = useState(false)
-  
-  // Selection State
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [selectedConstraintId, setSelectedConstraintId] = useState<string | null>(null)
   const [selectedBudget, setSelectedBudget] = useState<Budget | null>(null)
-  const [selectedTransactions, setSelectedTransactions] = useState<Transaction[]>([])
-  const [detailsLoading, setDetailsLoading] = useState(false)
-
-  const handleBudgetSelect = async (budget: Budget) => {
-      setSelectedBudget(budget)
-      setDetailsLoading(true)
-      try {
-          const res = await transactionsService.getAll({
-              category_id: budget.category_id,
-              start_date: budget.start_date,
-              end_date: budget.end_date,
-              limit: 5 // Only need top 5 for preview
-          })
-          setSelectedTransactions(res.transactions)
-      } catch (error) {
-          console.error("Failed to load transactions for budget", error)
-          setSelectedTransactions([])
-      } finally {
-          setDetailsLoading(false)
-      }
-  }
-
+  const [editingConstraint, setEditingConstraint] = useState<BudgetConstraint | null>(null)
+  const [viewMode, setViewMode] = useState<"active" | "ended" | "other">("active")
+  const [otherBudgets, setOtherBudgets] = useState<Budget[]>([])
+  const [otherTransactions, setOtherTransactions] = useState<Transaction[]>([])
+  const [isLoadingOther, setIsLoadingOther] = useState(false)
+  
   useEffect(() => {
-    refreshBudgets()
     refreshConstraints()
     refreshSummary()
     refreshCategories()
-  }, [refreshBudgets, refreshConstraints, refreshSummary, refreshCategories])
+    refreshBudgets()
+  }, [refreshConstraints, refreshSummary, refreshCategories, refreshBudgets])
 
-  // Create category lookup map
-  const categoryMap = categories.reduce((acc, cat) => {
-    acc[cat.id] = cat.name
-    return acc
-  }, {} as Record<string, string>)
+  useEffect(() => {
+    dispatch(fetchTransactions({ 
+      direction: "DEBIT",
+      pageSize: 100
+    }))
+  }, [dispatch])
 
-  // Enrich constraints with category names
-  const enrichedConstraints = constraints.map(constraint => ({
-    ...constraint,
-    category_name: categoryMap[constraint.category_id] || `Category ${constraint.category_id.slice(0, 8)}...`
-  }))
+  // Fetch other items when switching to "other" tab
+  useEffect(() => {
+    if (viewMode === "other") {
+      fetchOtherItems()
+    }
+  }, [viewMode, constraints, budgets])
 
+  const fetchOtherItems = async () => {
+    setIsLoadingOther(true)
+    try {
+      // Get budgets without constraints
+      const constraintCategoryIds = new Set(constraints.map(c => c.category_id))
+      const budgetsWithoutConstraints = (budgets || []).filter(b => 
+        !b.category_id || !constraintCategoryIds.has(b.category_id)
+      )
+      setOtherBudgets(budgetsWithoutConstraints)
 
+      // Get transactions without links (DEBIT direction, no links or no BUDGET/GOAL/DEBT links)
+      const transactionsData = await transactionsService.getAll({
+        direction: 'DEBIT',
+        limit: 100
+      })
+      
+      const transactionsWithoutLinks = transactionsData.transactions.filter((tx: Transaction) => {
+        // No links at all
+        if (!tx.links || tx.links.length === 0) {
+          return true
+        }
+        // Has links but none are BUDGET, GOAL, or DEBT (exclude INCOME_PROFILE)
+        const hasRelevantLink = tx.links.some((link) => 
+          link.type === 'BUDGET' || link.type === 'GOAL' || link.type === 'DEBT'
+        )
+        return !hasRelevantLink
+      })
+      
+      setOtherTransactions(transactionsWithoutLinks)
+    } catch (error) {
+      console.error("Failed to fetch other items:", error)
+    } finally {
+      setIsLoadingOther(false)
+    }
+  }
 
-  // Separate budgets into Active, Future, and Past
-  const now = new Date()
+  const handleEdit = (constraint: BudgetConstraint) => {
+      setEditingConstraint(constraint)
+      setIsEditModalOpen(true)
+  }
+
+  const handleEnd = async (id: string) => {
+      if (confirm("Are you sure you want to mark this constraint as ended?")) {
+          await endConstraint(id)
+          refreshConstraints()
+          refreshSummary()
+      }
+  }
+
+  // Filter items
+  const activeItems = constraints.filter(c => c.status === 'active')
+  const historyItems = constraints.filter(c => c.status !== 'active') // Includes both 'ended' and 'archived'
   
-  // Sort all budgets descending by date first
-  const sortedBudgets = [...(budgets || [])].sort((a, b) => 
-    new Date(b.start_date).getTime() - new Date(a.start_date).getTime()
-  )
+  const displayedItems = viewMode === "active" ? activeItems : historyItems
+  
+  const selectedConstraint = constraints.find(c => c.id === selectedConstraintId)
 
-  const futureBudgets = sortedBudgets.filter((b) => {
-    return new Date(b.start_date) > now
-  })
-
-  // activeBudgets: current, not expired, not ended
-  const activeBudgets = sortedBudgets.filter((b) => {
-    if (new Date(b.start_date) > now) return false
-    if (b.status === 'expired') return false
-    if (b.end_date && new Date(b.end_date) < now) return false
-    return true
-  })
-
-  // pastBudgets: expired or ended
-  const pastBudgets = sortedBudgets.filter((b) => {
-    if (b.status === 'expired') return true
-    if (b.end_date && new Date(b.end_date) < now) return true
-    return false
-  })
-
-  const handleDeleteBudget = async (id: string) => {
-    if (confirm('Are you sure you want to delete this budget?')) {
-      await removeBudget(id)
-      refreshBudgets()
-    }
+  const handleBudgetClick = (budget: Budget) => {
+    setSelectedBudget(budget)
+    setSelectedConstraintId(null) // Clear constraint selection
   }
 
-  const handleDeleteConstraint = async (id: string) => {
-    if (confirm('Are you sure you want to delete this constraint?')) {
-      await removeConstraint(id)
-      refreshConstraints()
-      refreshSummary()
-    }
-  }
-
-  if (budgetsLoading || constraintsLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-2 text-muted-foreground">Loading budgets...</p>
-        </div>
-      </div>
-    )
+  const handleConstraintClick = (id: string) => {
+    setSelectedConstraintId(id)
+    setSelectedBudget(null) // Clear budget selection
   }
 
   return (
-    <div className="space-y-6 h-[calc(100vh-100px)] flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-shrink-0">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Budgets & Constraints</h1>
-          <p className="text-muted-foreground">Manage your budget constraints and spending limits</p>
+    <div className="flex h-[calc(100vh-65px)] overflow-hidden">
+        {/* Left Sidebar - List */}
+        <div className="w-full md:w-1/3 lg:w-3/12 border-r bg-gradient-to-b from-background to-muted/20 flex flex-col">
+            <div className="p-5 border-b bg-background/80 backdrop-blur-sm space-y-4">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <div className="p-2 rounded-lg bg-primary/10">
+                            <Target className="h-5 w-5 text-primary" />
+                        </div>
+                        <h2 className="text-xl font-bold tracking-tight">Constraints</h2>
+                    </div>
+                    <div className="flex gap-2">
+                        <Button size="sm" variant="outline" onClick={() => setIsCreateBudgetModalOpen(true)} className="shadow-sm">
+                            <Plus className="h-4 w-4 mr-1" />
+                            Budget
+                        </Button>
+                        <Button size="sm" onClick={() => setIsCreateModalOpen(true)} className="shadow-sm">
+                            <Plus className="h-4 w-4" />
+                        </Button>
+                    </div>
+                </div>
+                
+                <div className="flex flex-col gap-1">
+                    <div className="flex bg-muted p-1 rounded-lg">
+                        <button 
+                            className={`flex-1 text-xs font-medium py-1.5 px-3 rounded-md transition-all ${viewMode === 'active' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                            onClick={() => setViewMode('active')}
+                        >
+                            Active ({activeItems.length})
+                        </button>
+                        <button 
+                            className={`flex-1 text-xs font-medium py-1.5 px-3 rounded-md transition-all ${viewMode === 'ended' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                            onClick={() => setViewMode('ended')}
+                        >
+                            Ended ({historyItems.length})
+                        </button>
+                    </div>
+                    <button 
+                        className={`w-full text-xs font-medium py-1.5 px-3 rounded-md transition-all ${viewMode === 'other' ? 'bg-background shadow-sm text-foreground border border-primary' : 'text-muted-foreground hover:text-foreground border border-transparent'}`}
+                        onClick={() => setViewMode('other')}
+                    >
+                        Other
+                    </button>
+                </div>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                 {viewMode === 'other' ? (
+                     <OtherItemsView 
+                         budgets={otherBudgets}
+                         transactions={otherTransactions}
+                         isLoading={isLoadingOther || budgetsLoading}
+                         onBudgetClick={handleBudgetClick}
+                         selectedBudgetId={selectedBudget?.id || null}
+                     />
+                 ) : constraintsLoading ? (
+                     <div className="text-center py-8 text-sm text-muted-foreground">Loading...</div>
+                 ) : displayedItems.length === 0 ? (
+                     <div className="text-center py-16 px-4">
+                         <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-muted/50 mb-4">
+                             <Wallet className="h-10 w-10 text-muted-foreground/50" />
+                         </div>
+                         <p className="text-sm font-medium text-muted-foreground mb-1">
+                             {viewMode === 'active' ? "No active constraints" : "No history records"}
+                         </p>
+                         <p className="text-xs text-muted-foreground/70">
+                             {viewMode === 'active' ? "Create your first constraint to get started" : "Ended constraints will appear here"}
+                         </p>
+                     </div>
+                 ) : (
+                     displayedItems.map(constraint => (
+                         <ConstraintCard 
+                             key={constraint.id} 
+                             constraint={constraint} 
+                             onEdit={handleEdit}
+                             onClick={handleConstraintClick}
+                             onEnd={handleEnd}
+                             isSelected={selectedConstraintId === constraint.id}
+                         />
+                     ))
+                 )}
+            </div>
         </div>
-        <div className="flex gap-2">
-          <Button onClick={() => setIsCreateConstraintModalOpen(true)} variant="outline">
-            <Plus className="mr-2 h-4 w-4" />
-            Add Constraint
-          </Button>
-          <Button onClick={() => setIsCreateBudgetModalOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Create Budget
-          </Button>
-        </div>
-      </div>
-
-      {/* Main Content - 4 Column Grid (1:1:2 ratio) */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 flex-1 min-h-0">
         
-        {/* Column 1 & 2: Budget Graph (Constraint -> Budget) */}
-        <div className="lg:col-span-2 overflow-y-auto pr-2 border-r custom-scrollbar">
-            <div className="flex items-center justify-between sticky top-0 bg-background z-20 py-2 border-b mb-4">
-                <div className="flex items-center gap-2">
-                    <h2 className="text-xl font-semibold">Budget Map</h2>
-                    <Badge variant="outline">{budgets.length}</Badge>
-                </div>
-            </div>
-
-            <div className="space-y-8 pb-8">
-                {/* 1. Mapped Constraints */}
-                {enrichedConstraints.map((constraint) => {
-                    const constraintBudgets = sortedBudgets.filter(b => b.category_id === constraint.category_id);
-                    
-                    return (
-                        <div key={constraint.id} className="relative grid grid-cols-2 gap-8 group/row">
-                            {/* Connector Line (Vertical Spine) - Only if multiple budgets or visual preference */}
-                            {/* We can use simple Horizontal connectors from Constraint Right to Budgets Left */}
-                            
-                            {/* Left: Constraint Node */}
-                            <div className="relative z-10">
-                                <div className="sticky top-16"> {/* Sticky allows it to follow scroll if list is long */}
-                                    <ConstraintCard
-                                        constraint={constraint}
-                                        onEdit={(id) => console.log('Edit', id)}
-                                        onClick={(id) => router.push(`/budgets/constraints/${id}`)}
-                                        onDelete={handleDeleteConstraint}
-                                    />
-                                    {/* Connector Point */}
-                                    {constraintBudgets.length > 0 && (
-                                        <div className="absolute top-1/2 -right-4 w-4 h-px bg-border group-hover/row:bg-primary/50 transition-colors" />
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Right: Budget Nodes */}
-                            <div className="relative space-y-4">
-                                {/* Vertical Tree Line if we want tree structure */}
-                                {constraintBudgets.length > 0 && (
-                                     <div className="absolute -left-4 top-0 bottom-0 w-px bg-border group-hover/row:bg-primary/50 transition-colors" />
-                                )}
-
-                                {constraintBudgets.length === 0 ? (
-                                    <div className="h-full flex items-center text-muted-foreground text-sm italic py-4">
-                                        No budgets linked
-                                    </div>
-                                ) : (
-                                    constraintBudgets.map((budget) => {
-                                        const isActive = selectedBudget?.id === budget.id;
-                                        return (
-                                            <div key={budget.id} className="relative">
-                                                {/* Horizontal Link */}
-                                                <div className={`absolute -left-4 top-1/2 w-4 h-px transition-colors ${isActive ? 'bg-primary' : 'bg-border'}`} />
-                                                
-                                                <div className={`transition-all duration-200 ${isActive ? 'ring-2 ring-primary rounded-lg shadow-md scale-[1.02]' : ''}`}>
-                                                    <BudgetCard
-                                                        budget={budget}
-                                                        variant={budget.status === 'active' ? "active" : "past"}
-                                                        onClick={() => handleBudgetSelect(budget)}
-                                                        onView={() => handleBudgetSelect(budget)}
-                                                        onDelete={handleDeleteBudget}
-                                                    />
-                                                </div>
-                                            </div>
-                                        )
-                                    })
-                                )}
-                            </div>
-                        </div>
-                    )
-                })}
-
-                {/* 2. Unmapped / Other Budgets */}
-                {(() => {
-                    const constraintIds = new Set(enrichedConstraints.map(c => c.category_id));
-                    const otherBudgets = sortedBudgets.filter(b => !constraintIds.has(b.category_id));
-                    
-                    if (otherBudgets.length === 0) return null;
-
-                    return (
-                        <div className="relative grid grid-cols-2 gap-8 group/other">
-                            {/* Left: Other Node */}
-                            <div className="relative z-10">
-                                <div className="sticky top-16 p-4 border border-dashed rounded-lg bg-muted/20 flex flex-col items-center justify-center text-center h-[120px]">
-                                    <div className="h-8 w-8 rounded-full bg-slate-200 flex items-center justify-center mb-2">
-                                        <span className="text-muted-foreground text-xs font-bold">?</span>
-                                    </div>
-                                    <h3 className="font-semibold text-muted-foreground">Uncategorized</h3>
-                                    <p className="text-xs text-muted-foreground">{otherBudgets.length} budgets</p>
-
-                                    {/* Connector */}
-                                    <div className="absolute top-1/2 -right-4 w-4 h-px bg-border group-hover/other:bg-slate-400 transition-colors" />
-                                </div>
-                            </div>
-
-                            {/* Right: Budget Nodes */}
-                            <div className="relative space-y-4">
-                                <div className="absolute -left-4 top-0 bottom-0 w-px bg-border group-hover/other:bg-slate-400 transition-colors" />
-                                {otherBudgets.map((budget) => {
-                                     const isActive = selectedBudget?.id === budget.id;
-                                     return (
-                                        <div key={budget.id} className="relative">
-                                            <div className={`absolute -left-4 top-1/2 w-4 h-px transition-colors ${isActive ? 'bg-primary' : 'bg-border'}`} />
-                                            <div className={`transition-all duration-200 ${isActive ? 'ring-2 ring-primary rounded-lg shadow-md scale-[1.02]' : ''}`}>
-                                                <BudgetCard
-                                                    budget={budget}
-                                                    variant={budget.status === 'active' ? "active" : "past"}
-                                                    onClick={() => handleBudgetSelect(budget)}
-                                                    onView={() => handleBudgetSelect(budget)}
-                                                    onDelete={handleDeleteBudget}
-                                                />
-                                            </div>
-                                        </div>
-                                     )
-                                })}
-                            </div>
-                        </div>
-                    )
-                })()}
-            </div>
-        </div>
-
-        {/* Column 3 & 4: Detail Panel (Placeholder -> Stats) */}
-        {!selectedBudget ? (
-            <div className="lg:col-span-2 border-dashed border-2 rounded-lg bg-muted/10 flex flex-col items-center justify-center m-4 text-muted-foreground animate-in fade-in zoom-in-95 duration-300">
-                <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center mb-4">
-                     <Wallet className="h-8 w-8 opacity-50" />
-                </div>
-                <h3 className="text-lg font-medium">Select a Budget</h3>
-                <p className="text-sm">Click on any budget in the map to view detailed statistics.</p>
-            </div>
-        ) : (
-            <div className="lg:col-span-2 flex flex-col p-1 overflow-y-auto animate-in slide-in-from-right-4 duration-300">
-                 {/* Detail View Header */}
-                 <div className="flex items-start justify-between mb-6 pb-4 border-b">
-                     <div>
-                         <h2 className="text-2xl font-bold">{selectedBudget.name}</h2>
-                         <div className="flex items-center gap-2 text-muted-foreground mt-1 text-sm">
-                             <Badge variant={selectedBudget.status === 'active' ? 'default' : 'secondary'}>{selectedBudget.status}</Badge>
-                             <span>•</span>
-                             <span>{formatDate(selectedBudget.start_date)} - {formatDate(selectedBudget.end_date)}</span>
+        {/* Right Content - Detail */}
+        <div className="flex-1 bg-background overflow-y-auto">
+             {selectedBudget ? (
+                 <div className="p-6 md:p-8 max-w-4xl mx-auto">
+                     <BudgetDetail 
+                         budget={selectedBudget} 
+                         onClose={() => setSelectedBudget(null)}
+                     />
+                 </div>
+             ) : selectedConstraint ? (
+                 <div className="p-6 md:p-8 max-w-4xl mx-auto">
+                     <ConstraintDetail 
+                         constraint={selectedConstraint} 
+                         onClose={() => setSelectedConstraintId(null)}
+                         onEdit={handleEdit}
+                         onEnd={selectedConstraint.status === 'active' ? handleEnd : undefined}
+                     />
+                 </div>
+             ) : (
+                 <div className="p-6 md:p-8 h-full flex flex-col bg-gradient-to-br from-background via-background to-muted/20">
+                     <div className="mb-8">
+                         <div className="flex items-center gap-3 mb-3">
+                             <div className="p-3 rounded-xl bg-primary/10">
+                                 <TrendingUp className="h-6 w-6 text-primary" />
+                             </div>
+                             <div>
+                                 <h1 className="text-3xl font-bold tracking-tight">Budget Constraints Overview</h1>
+                                 <p className="text-muted-foreground mt-1">Select a constraint to view details or manage your budget limits below.</p>
+                             </div>
                          </div>
                      </div>
-                     <Button variant="outline" size="sm" onClick={() => router.push(`/budgets/${selectedBudget.id}`)}>
-                         Full Detail <ArrowUpRight className="ml-2 h-4 w-4" />
-                     </Button>
-                 </div>
-
-                 {/* Key Stats Grid */}
-                 <div className="grid grid-cols-2 gap-4 mb-8">
-                     <Card>
-                         <CardContent className="pt-6">
-                             <div className="text-sm font-medium text-muted-foreground">Spent</div>
-                             <div className="text-2xl font-bold text-primary">{formatCurrency(selectedBudget.spent_amount)}</div>
-                             <Progress value={Math.min((selectedBudget.spent_amount / selectedBudget.amount) * 100, 100)} className="h-2 mt-2" />
-                         </CardContent>
-                     </Card>
-                     <Card>
-                         <CardContent className="pt-6">
-                             <div className="text-sm font-medium text-muted-foreground">Remaining</div>
-                             <div className="text-2xl font-bold">{formatCurrency(selectedBudget.amount - selectedBudget.spent_amount)}</div>
-                             <div className="text-xs text-muted-foreground mt-2">
-                                 of {formatCurrency(selectedBudget.amount)} total
-                             </div>
-                         </CardContent>
-                     </Card>
-                 </div>
-
-                 {/* Transactions Preview */}
-                 <div className="flex-1 min-h-0 flex flex-col">
-                     <h3 className="font-semibold mb-4 flex items-center gap-2">
-                         <History className="h-4 w-4" /> Recent Transactions
-                     </h3>
-                     {detailsLoading ? (
-                         <div className="flex-1 flex items-center justify-center">Loading transactions...</div>
-                     ) : selectedTransactions.length === 0 ? (
-                         <div className="text-center py-8 text-muted-foreground border rounded-md bg-muted/20">No transactions found</div>
-                     ) : (
-                         <div className="space-y-3 overflow-y-auto pr-2">
-                             {selectedTransactions.map((tx) => (
-                                 <div key={tx.id} className="flex items-center justify-between p-3 border rounded-lg bg-card hover:bg-accent/50 transition-colors">
-                                     <div className="flex items-center gap-3">
-                                         <div className={`h-8 w-8 rounded-full flex items-center justify-center ${tx.amount < 0 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
-                                             {tx.amount < 0 ? <TrendingDown className="h-4 w-4" /> : <TrendingUp className="h-4 w-4" />}
-                                         </div>
-                                         <div>
-                                             <div className="font-medium text-sm">{tx.description || "Unnamed Transaction"}</div>
-                                             <div className="text-xs text-muted-foreground">{formatDate(tx.date)}</div>
-                                         </div>
-                                     </div>
-                                     <div className={`font-semibold text-sm ${tx.amount < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                         {tx.amount > 0 ? '+' : ''}{formatCurrency(tx.amount)}
-                                     </div>
+                     <div className="max-w-4xl w-full mx-auto space-y-6 mb-8">
+                         <ConstraintStats summary={summary} isLoading={constraintsLoading} />
+                         <BudgetCharts />
+                     </div>
+                     <div className="flex-1 flex items-center justify-center">
+                         <div className="text-center max-w-md">
+                             <div className="relative inline-block mb-6">
+                                 <div className="absolute inset-0 bg-primary/20 blur-3xl rounded-full"></div>
+                                 <div className="relative p-8 rounded-2xl bg-gradient-to-br from-muted/50 to-muted/30 border border-border/50 backdrop-blur-sm">
+                                     <Wallet className="h-16 w-16 mx-auto text-primary/60 mb-4" />
                                  </div>
-                             ))}
-                             <Button variant="ghost" className="w-full text-xs" onClick={() => router.push(`/budgets/${selectedBudget.id}`)}>
-                                 View All Transactions
-                             </Button>
+                             </div>
+                             <h3 className="text-lg font-semibold mb-2 text-foreground">Select a constraint</h3>
+                             <p className="text-sm text-muted-foreground">
+                                 Choose a constraint from the list to view detailed information, edit settings, or manage your budget limits.
+                             </p>
                          </div>
-                     )}
+                     </div>
                  </div>
-            </div>
-        )}
-      </div>
+             )}
+        </div>
 
-      {/* Modals */}
-      <CreateBudgetModal
-        open={isCreateBudgetModalOpen}
+      <CreateConstraintModal 
+        open={isCreateModalOpen} 
+        onOpenChange={setIsCreateModalOpen}
+        onSuccess={() => {
+          refreshConstraints()
+          refreshSummary()
+        }}
+      />
+
+      <CreateBudgetModal 
+        open={isCreateBudgetModalOpen} 
         onOpenChange={setIsCreateBudgetModalOpen}
         onSuccess={() => {
           refreshBudgets()
         }}
       />
 
-      <CreateConstraintModal
-        open={isCreateConstraintModalOpen}
-        onOpenChange={setIsCreateConstraintModalOpen}
-        onSuccess={() => {
-          refreshConstraints()
-          refreshSummary()
-        }}
-      />
+      {editingConstraint && (
+        <EditConstraintModal 
+          open={isEditModalOpen} 
+          onOpenChange={(open) => {
+            setIsEditModalOpen(open)
+            if (!open) setEditingConstraint(null)
+          }}
+          constraint={editingConstraint}
+          onSuccess={() => {
+            refreshConstraints()
+            refreshSummary()
+            setEditingConstraint(null)
+          }}
+        />
+      )}
     </div>
   )
 }

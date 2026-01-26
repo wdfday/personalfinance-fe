@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react"
 import { useAppDispatch, useAppSelector } from "@/lib/hooks"
-import { runBudgetAllocation, simulateDebtStrategy, prioritizeGoals } from "@/features/analytics/analyticsSlice"
 import { fetchConstraints } from "@/features/budget-constraints/budgetConstraintsSlice"
 import { fetchGoals } from "@/features/goals/goalsSlice"
 import { fetchDebts } from "@/features/debts/debtsSlice"
@@ -10,6 +9,9 @@ import { fetchDebts } from "@/features/debts/debtsSlice"
 import { selectCurrentMonth } from "@/features/calendar/month/monthSlice"
 import { fetchIncomeProfiles } from "@/features/income/incomeSlice"
 import monthService from "@/services/api/services/month.service"
+import { dssWorkflowService } from "@/services/api/services/dss-workflow.service"
+import { resetLocalDSSState } from "@/features/month-dss/dssWorkflowSlice"
+import { toast } from "sonner"
 
 
 
@@ -24,14 +26,19 @@ export default function MonthDSSPage() {
   const dispatch = useAppDispatch()
   
   // Selectors
-  const { constraints } = useAppSelector((state) => state.budgetConstraints)
-  const { goals } = useAppSelector((state) => state.goals)
-  const { debts } = useAppSelector((state) => state.debts)
+  const { constraints: rawConstraints } = useAppSelector((state) => state.budgetConstraints)
+  const { goals: rawGoals } = useAppSelector((state) => state.goals)
+  const { debts: rawDebts } = useAppSelector((state) => state.debts)
   const incomeState = useAppSelector((state) => state.income)
   const currentMonth = useAppSelector(selectCurrentMonth)
   
   // Selectors
   const user = useAppSelector((state) => state.auth.authInfo)
+
+  // Defensive defaults: data có thể undefined lúc initial load
+  const constraints = rawConstraints || []
+  const goals = rawGoals || []
+  const debts = rawDebts || []
 
   const [result, setResult] = useState<any>(null)
 
@@ -44,39 +51,84 @@ export default function MonthDSSPage() {
   const [monthId, setMonthId] = useState<string | null>(null)
   const [monthStr, setMonthStr] = useState<string>('current')
   const [isMonthReady, setIsMonthReady] = useState(false)
+  const [monthStatus, setMonthStatus] = useState<string>('OPEN')
   
   const [selectedConstraintIds, setSelectedConstraintIds] = useState<string[]>([])
   const [selectedGoalIds, setSelectedGoalIds] = useState<string[]>([])
   const [selectedDebtIds, setSelectedDebtIds] = useState<string[]>([])
 
+  // Tháng hiện tại theo lịch (YYYY-MM). Không dùng /months/current vì backend trả về tháng OPEN (vd 2025-12) thay vì tháng thật.
+  const getCalendarCurrentMonthStr = () => {
+    const now = new Date()
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  }
+
   // Initial Fetch - Get/create month FIRST + fetch reference data
   useEffect(() => {
       const initialize = async () => {
         console.log('🚀 Initializing page...')
+        const calendarCurrent = getCalendarCurrentMonthStr()
         
         try {
-          // 1. Get or create current month (apiClient already unwraps .data)
-          console.log('📅 GET /months/current...')
-          const monthData = await monthService.getMonthView('current')
+          // 1. Lấy tháng hiện tại theo lịch (YYYY-MM), tự động tạo nếu chưa có
+          console.log('📅 GET /months/' + calendarCurrent + '...')
+          const monthData = await monthService.getMonthViewOrCreate(calendarCurrent)
           console.log('📦 Month data:', monthData)
           
           if (monthData?.month_id) {
             setMonthId(monthData.month_id)
             setMonthStr(monthData.month)
+            setMonthStatus(monthData.status || 'OPEN')
             console.log('✅ Month ready:', monthData.month, monthData.month_id)
+            console.log('📦 DSS Workflow data:', monthData.dss_workflow)
+            console.log('📦 Categories:', monthData.categories?.length || 0)
+            
+            // 2. Determine initial step based on month data
+            const isCurrentMonth = monthData.month === calendarCurrent
+            
+            // Check if DSS workflow exists:
+            // - Có dss_workflow field và is_complete = true
+            // - HOẶC có categories với assigned amounts (đã finalize DSS)
+            const hasDSSWorkflow = (monthData.dss_workflow != null && monthData.dss_workflow.is_complete) ||
+                                   (monthData.categories && monthData.categories.length > 0 && 
+                                    monthData.categories.some((cat: any) => cat.assigned > 0))
+            
+            console.log('🔍 Step determination:', {
+              isCurrentMonth,
+              hasDSSWorkflow,
+              hasDSSWorkflowField: monthData.dss_workflow != null,
+              dss_workflow_complete: monthData.dss_workflow?.is_complete,
+              categoriesCount: monthData.categories?.length || 0,
+              budgeted: monthData.budgeted,
+              hasAssignedCategories: monthData.categories?.some((cat: any) => cat.assigned > 0)
+            })
+            
+            if (hasDSSWorkflow && isCurrentMonth) {
+              // Có DSS workflow và là tháng hiện tại -> Step 3 (Analytics)
+              console.log('📊 Month has DSS workflow (current month) -> Step 3')
+              setCurrentStep(3)
+            } else if (hasDSSWorkflow && !isCurrentMonth) {
+              // Có DSS workflow nhưng là tháng trước -> Step 4 (Closing)
+              console.log('📊 Month has DSS workflow (previous month) -> Step 4')
+              setCurrentStep(4)
+            } else {
+              // Không có DSS workflow -> Step 1 (Input)
+              console.log('📊 Month has no DSS workflow -> Step 1')
+              setCurrentStep(1)
+            }
           } else {
             console.error('❌ Invalid response - no month_id')
           }
         } catch (error) {
           console.error('❌ Failed to get/create month:', error)
         } finally {
-          // 2. Fetch reference data
-          dispatch(fetchConstraints({}))
-          dispatch(fetchGoals())
-          dispatch(fetchDebts())
-          dispatch(fetchIncomeProfiles())
-          
-          // 3. ALWAYS set ready
+          // 3. Fetch reference data
+      dispatch(fetchConstraints({}))
+      dispatch(fetchGoals())
+      dispatch(fetchDebts())
+      dispatch(fetchIncomeProfiles())
+      
+          // 4. ALWAYS set ready
           console.log('🏁 Setting isMonthReady = true')
           setIsMonthReady(true)
         }
@@ -86,15 +138,45 @@ export default function MonthDSSPage() {
   }, [dispatch])
   
 
-  // Smart Income Default
+  // Helper function to convert income amount to monthly equivalent based on frequency
+  const calculateMonthlyEquivalent = (amount: number, frequency: string): number => {
+    switch (frequency?.toLowerCase()) {
+      case "weekly":
+        return amount * 52 / 12 // 52 weeks per year / 12 months
+      case "bi-weekly":
+      case "biweekly":
+        return amount * 26 / 12 // 26 bi-weeks per year / 12 months
+      case "monthly":
+        return amount
+      case "quarterly":
+        return amount / 3
+      case "yearly":
+      case "annual":
+        return amount / 12
+      case "one-time":
+        return 0 // One-time income doesn't contribute to recurring monthly
+      default:
+        // Default to monthly if frequency not recognized
+        return amount
+    }
+  }
+
+  // Smart Income Default - Calculate from ALL active income profiles (not just recurring)
+  // Convert each to monthly equivalent based on frequency
   useEffect(() => {
       if (income === 0 && incomeState.items.length > 0) {
-          const recurringTotal = incomeState.items
-            .filter(item => item.is_active && item.is_recurring)
-            .reduce((sum, item) => sum + Number(item.amount), 0)
+          const totalMonthlyIncome = incomeState.items
+            .filter(item => item.is_active) // Include all active income profiles
+            .reduce((sum, item) => {
+              const monthlyEquivalent = calculateMonthlyEquivalent(
+                Number(item.amount || 0), 
+                item.frequency || "monthly"
+              )
+              return sum + monthlyEquivalent
+            }, 0)
           
-          if (recurringTotal > 0) {
-             setIncome(recurringTotal)
+          if (totalMonthlyIncome > 0) {
+             setIncome(totalMonthlyIncome)
           }
       }
   }, [incomeState.items, income])
@@ -116,6 +198,13 @@ export default function MonthDSSPage() {
       }
   }, [constraints])
 
+  // Auto-select all debts by default (user có thể bỏ tick sau)
+  useEffect(() => {
+    if (debts.length > 0 && selectedDebtIds.length === 0) {
+      setSelectedDebtIds(debts.map(d => d.id))
+    }
+  }, [debts])
+
 
   // Local constraints state (captured from MonthInputStep)
   const [localConstraints, setLocalConstraints] = useState<any[]>([])
@@ -127,134 +216,123 @@ export default function MonthDSSPage() {
     }
   }, [constraints])
 
-  const handleRunOptimization = async () => {
-    if (income <= 0 || !user) return
-    if (!monthId) {
+  // State to track if DSS is initialized
+  const [isDSSInitialized, setIsDSSInitialized] = useState(false)
+
+  // Khởi tạo DSS workflow (Initialize API)
+  const handleRunOptimization = async (): Promise<boolean> => {
+    // Chỉ chặn nếu thiếu month, còn lại để BE validate
+    if (!monthId || !monthStr) {
       console.error('❌ Month not initialized yet')
-      return
+      toast.error('Chưa khởi tạo month')
+      return false
+    }
+
+    // Nếu đã init rồi thì không gọi lại, cho qua luôn
+    if (isDSSInitialized) {
+      return true
     }
     
     try {
-        console.log('🚀 Running DSS analytics preview...')
-        console.log('📊 User input:', {
-          monthId,
-          monthStr,
-          income,
-          constraints: selectedConstraintIds.length,
-          goals: selectedGoalIds.length,
-          debts: selectedDebtIds.length
-        })
+        console.log('🚀 Initializing DSS workflow...')
+
+        // Reset toàn bộ DSS local state (autoScoring, step1-4) trước khi init session mới
+        dispatch(resetLocalDSSState())
         
         // Use localConstraints if available, otherwise fallback to Redux state
         const activeConstraints = localConstraints.length > 0 ? localConstraints : constraints
 
-        // 1. Prepare Budget Allocation Input (P1)
-        const mandatoryExpenses = activeConstraints
-            .filter(c => selectedConstraintIds.includes(c.id) && !c.is_flexible)
-            .map(c => ({
-                category_id: c.category_id,
-                name: c.category_name || c.description || 'Unknown',
-                amount: c.minimum_amount,
-                priority: c.priority || 1
-            }))
-
-        const flexibleExpenses = activeConstraints
-            .filter(c => selectedConstraintIds.includes(c.id) && c.is_flexible)
-            .map(c => ({
-                category_id: c.category_id,
-                name: c.category_name || c.description || 'Unknown',
-                min_amount: c.minimum_amount,
-                max_amount: c.maximum_amount || c.minimum_amount * 1.5, // Default range if not set
-                priority: c.priority || 2
-            }))
-            
-        const debtInputs = debts
-            .filter(d => selectedDebtIds.includes(d.id))
-            .map(d => ({
-                debt_id: d.id,
-                name: d.name,
-                balance: d.current_balance,
-                interest_rate: d.interest_rate / 100, // Convert percentage to decimal
-                minimum_payment: d.minimum_payment
-            }))
-
-        const goalInputs = goals
+        // Prepare goals for DSS
+        const goalInputs = (goals || [])
             .filter(g => selectedGoalIds.includes(g.id))
             .map(g => ({
-                goal_id: g.id,
+                id: g.id,
                 name: g.name,
+                target_amount: g.targetAmount || 0,
+                current_amount: g.currentAmount || 0,
+                target_date: g.targetDate ? new Date(g.targetDate).toISOString().split('T')[0] : undefined,
                 type: (g as any).type || 'savings',
                 priority: typeof g.priority === 'string' ? g.priority : 'medium',
-                remaining_amount: (g.targetAmount || 0) - (g.currentAmount || 0),
-                suggested_contribution: 0 // Let model decide
             }))
 
-        // 2. Prepare Debt Strategy Input (P2)
-        const debtInfos = debts
+        // Prepare debts for DSS
+        const debtInputs = (debts || [])
             .filter(d => selectedDebtIds.includes(d.id))
-            .map(d => ({
-                id: d.id,
-                name: d.name,
-                type: 'loan', // Default
-                balance: d.current_balance,
-                interest_rate: d.interest_rate / 100,
-                minimum_payment: d.minimum_payment,
-            }))
-
-        // 3. Prepare Goal Prioritization Input (P3)
-        const goalRatings = goals
-            .filter(g => selectedGoalIds.includes(g.id))
-            .map(g => ({
-                goal_id: g.id,
-                name: g.name,
-                ratings: {
-                    urgency: 5, // Defaults
-                    importance: 5,
-                    roi: 5,
-                    effort: 5
+            .map(d => {
+                const debtInput: {
+                    id: string
+                    name: string
+                    current_balance: number
+                    interest_rate: number
+                    minimum_payment: number
+                    behavior?: string
+                } = {
+                    id: d.id,
+                    name: d.name,
+                    current_balance: d.current_balance,
+                    interest_rate: d.interest_rate,
+                    minimum_payment: d.minimum_payment,
                 }
+                // Luôn gửi behavior field nếu có (backend sẽ default "installment" nếu không có)
+                if (d.behavior) {
+                    debtInput.behavior = d.behavior // "revolving", "installment", "interest_only"
+                }
+                return debtInput
+            })
+        
+        console.log('📦 Debt inputs for DSS:', debtInputs.map(d => ({
+            id: d.id,
+            name: d.name,
+            behavior: d.behavior || 'undefined (will default to installment)'
+        })))
+
+        // Prepare constraints for DSS
+        const constraintInputs = (activeConstraints || [])
+            .filter(c => selectedConstraintIds.includes(c.id))
+            .map(c => ({
+                id: c.id,
+                name: c.category_name || c.description || 'Unknown',
+                category_id: c.category_id,
+                minimum_amount: c.minimum_amount || 0,
+                maximum_amount: c.maximum_amount,
+                is_flexible: c.is_flexible || false,
+                priority: c.priority,
             }))
 
-        // Use current date if month info is missing
-        const currentYear = new Date().getFullYear();
-        const currentMonthNum = new Date().getMonth() + 1;
+        // ✅ Validate: selected constraints must have category_id (UUID) to avoid BE crash
+        const invalidConstraints = constraintInputs.filter((c) => !c.category_id)
+        if (invalidConstraints.length > 0) {
+          console.error('❌ Invalid constraints (missing category_id):', invalidConstraints)
+          toast.error('Có khoản chi chưa chọn danh mục (category). Vui lòng sửa trước khi Run Analysis.')
+          return false
+        }
 
-        // Execute all analytics in parallel
-        const [budgetRes, debtRes, goalRes] = await Promise.all([
-            dispatch(runBudgetAllocation({
-                user_id: user.id,
-                year: currentYear,
-                month: currentMonthNum,
-                total_income: income,
-                mandatory_expenses: mandatoryExpenses,
-                flexible_expenses: flexibleExpenses,
-                debts: debtInputs,
-                goals: goalInputs,
-                use_all_scenarios: true
-            })).unwrap(),
-            
-            debtInfos.length > 0 ? dispatch(simulateDebtStrategy({
-                user_id: user.id,
-                debts: debtInfos,
-                total_debt_budget: fixedExpenses * 0.2, // Estimate, allows user to adjust later
-                preferred_strategy: "avalanche"
-            })).unwrap() : Promise.resolve(null),
-
-            goalRatings.length > 0 ? dispatch(prioritizeGoals({
-                user_id: user.id,
-                goals: goalRatings
-            })).unwrap() : Promise.resolve(null)
-        ])
-
-        setResult({
-            budget: budgetRes,
-            debt: debtRes,
-            goals: goalRes
+        console.log('📊 DSS Initialize Input:', {
+          monthStr,
+          income,
+          goals: goalInputs.length,
+          debts: debtInputs.length,
+          constraints: constraintInputs.length
         })
+
+        // Call Initialize DSS API
+        const response = await dssWorkflowService.initializeDSS(monthStr, {
+            monthly_income: income,
+            goals: goalInputs,
+                debts: debtInputs,
+            constraints: constraintInputs,
+        })
+
+        console.log('✅ DSS Initialized:', response)
+        toast.success(`DSS đã khởi tạo! ${response.goal_count} goals, ${response.debt_count} debts, ${response.constraint_count} constraints`)
         
-    } catch (err) {
-        console.error("Optimization failed:", err)
-        // Toast error here
+        setIsDSSInitialized(true)
+        setResult({ initialized: true, ...response })
+        return true
+    } catch (err: any) {
+        console.error("DSS Initialize failed:", err)
+        toast.error(err?.response?.data?.message || 'Khởi tạo DSS thất bại')
+        return false
     }
   }
 
@@ -285,6 +363,9 @@ export default function MonthDSSPage() {
         )
       }
 
+      // Goals / debts đã chọn cho DSS
+      const selectedGoals = (goals || []).filter(g => selectedGoalIds.includes(g.id))
+
       switch(currentStep) {
           case 1:
               return (
@@ -304,45 +385,35 @@ export default function MonthDSSPage() {
                       selectedDebtIds={selectedDebtIds}
                       setSelectedDebtIds={setSelectedDebtIds}
                       
-                      onNext={() => {
-                          if (!result && income > 0) handleRunOptimization()
+                      onNext={async () => {
+                          const ok = await handleRunOptimization()
+                          if (ok) {
                           nextStep()
+                          }
                       }}
                   />
               )
           case 2:
                return (
-                  <>
-                    <DSSProblemWizard
-                      goals={goals as any} // Goals are managed by Redux/Selections
-                      debts={debts}
-                      monthStr={monthStr} // Use initialized month
-                      monthId={monthId}   // Use initialized month ID
-                      totalDebtBudget={(debts || [])
-                        .filter(d => selectedDebtIds.includes(d.id))
-                        .reduce((sum, d) => sum + d.minimum_payment, 0)
-                      }
-                      monthlyIncome={income}
-                      constraints={localConstraints.length > 0 ? localConstraints : constraints}
-                      onComplete={() => {
-                        // After completing DSS preview wizard, show finalize button
-                        // User will click finalize before moving to analytics
-                      }}
-                    />
-                    
-                    {/* Finalize DSS Button - shows after all previews done */}
-                    <div className="mt-8">
-                      <FinalizeDSSButton
-                        monthStr={monthStr}
-                        monthId={monthId}
-                        onComplete={nextStep}
-                      />
-                    </div>
-                  </>
+                  <DSSProblemWizard
+                    goals={selectedGoals as any} // chỉ truyền goals đã chọn
+                    debts={debts}
+                    monthStr={monthStr} // Use initialized month
+                    monthId={monthId}   // Use initialized month ID
+                    totalDebtBudget={(debts || [])
+                      .filter(d => selectedDebtIds.includes(d.id))
+                      .reduce((sum, d) => sum + d.minimum_payment, 0)
+                    }
+                    monthlyIncome={income}
+                    constraints={localConstraints.length > 0 ? localConstraints : constraints}
+                    onComplete={nextStep}
+                  />
                )
           case 3:
               return (
                   <MonthAnalyticsStep 
+                      monthId={monthId!}
+                      monthStr={monthStr}
                       onNext={nextStep}
                       onRecalculate={handleRecalculate}
                   />
@@ -350,8 +421,11 @@ export default function MonthDSSPage() {
           case 4:
               return (
                   <MonthClosingStep 
+                      monthId={monthId!}
+                      monthStr={monthStr}
                       onBack={prevStep}
                       onRestart={handleRecalculate}
+                      isClosed={monthStatus === 'CLOSED'}
                   />
               )
           default:
@@ -370,7 +444,7 @@ export default function MonthDSSPage() {
       </div>
 
       {/* Step Indicator */}
-      <div className="flex gap-2 justify-center w-full mt-8" aria-label="Step navigation">
+      <div className="flex gap-2 justify-center w-full mt-8 print:hidden" aria-label="Step navigation">
            {[1, 2, 3, 4].map(step => (
                <button
                   key={step}

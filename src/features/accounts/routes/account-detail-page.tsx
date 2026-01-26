@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
-import { ArrowLeft, ArrowRight, Activity, Info, Wallet, Shield, TrendingUp, AlertCircle, Coins } from "lucide-react"
+import { ArrowLeft, ArrowRight, ArrowUpRight, ArrowDownRight, Activity, Info, Wallet, Shield, TrendingUp, AlertCircle, Coins } from "lucide-react"
 import { useAppDispatch, useAppSelector } from "@/lib/hooks"
 import { fetchAccount, setSelectedAccount } from "@/features/accounts/accountsSlice"
 import { transactionsService, investmentsService, type Transaction, type Investment } from "@/services/api"
@@ -18,13 +18,29 @@ import { useTranslation } from "@/contexts/i18n-context"
 type AsyncState<T> = {
   data: T
   isLoading: boolean
+  isLoadingMore: boolean
+  hasMore: boolean
   error: string | null
+  pagination: {
+    page: number
+    pageSize: number
+    totalPages: number
+    totalCount: number
+  }
 }
 
 const initialTransactionsState: AsyncState<Transaction[]> = {
   data: [],
   isLoading: false,
+  isLoadingMore: false,
+  hasMore: false,
   error: null,
+  pagination: {
+    page: 1,
+    pageSize: 20,
+    totalPages: 0,
+    totalCount: 0,
+  },
 }
 
 const initialAssetsState: AsyncState<Investment[]> = {
@@ -66,26 +82,116 @@ export default function AccountDetailPage() {
     }
   }, [accountId, account, dispatch, selectedAccount])
 
+  // Load initial transactions
   useEffect(() => {
     if (!accountId) return
     let isMounted = true
-    setTransactionsState((prev) => ({ ...prev, isLoading: true, error: null }))
+    setTransactionsState((prev) => ({ ...prev, isLoading: true, error: null, data: [] }))
     transactionsService
-      .getTransactions({ accountId: accountId, page: 1, pageSize: 10 })
+      .getAll({ account_id: accountId, page: 1, pageSize: 20 })
       .then((response) => {
         if (!isMounted) return
-        setTransactionsState({ data: response.transactions, isLoading: false, error: null })
+        const pagination = response.pagination || {
+          page: 1,
+          pageSize: 20,
+          totalPages: 0,
+          totalCount: 0,
+        }
+        setTransactionsState({
+          data: response.transactions || [],
+          isLoading: false,
+          isLoadingMore: false,
+          hasMore: pagination.page < pagination.totalPages,
+          error: null,
+          pagination,
+        })
       })
       .catch((error) => {
         if (!isMounted) return
-        setTransactionsState({
+        setTransactionsState((prev) => ({
+          ...prev,
           data: [],
           isLoading: false,
+          isLoadingMore: false,
           error: error instanceof Error ? error.message : t("detail.transactions.error"),
-        })
+        }))
       })
     return () => {
       isMounted = false
+    }
+  }, [accountId, t])
+
+  // Load more transactions when scrolling
+  useEffect(() => {
+    let loadingMore = false
+    let isMounted = true
+    
+    const handleScroll = () => {
+      if (!accountId || loadingMore) return
+      
+      // Check if we're near the bottom of the page
+      const scrollTop = window.pageYOffset || document.documentElement.scrollTop
+      const scrollHeight = document.documentElement.scrollHeight
+      const clientHeight = document.documentElement.clientHeight
+      
+      // Load more when user is within 200px of the bottom
+      if (scrollHeight - scrollTop - clientHeight < 200) {
+        setTransactionsState((prev) => {
+          if (!prev.hasMore || prev.isLoading || prev.isLoadingMore || loadingMore) {
+            return prev
+          }
+          
+          loadingMore = true
+          const nextPage = prev.pagination.page + 1
+          
+          // Start loading
+          transactionsService
+            .getAll({ account_id: accountId, page: nextPage, pageSize: 20 })
+            .then((response) => {
+              if (!isMounted) return
+              const pagination = response.pagination || {
+                page: nextPage,
+                pageSize: 20,
+                totalPages: 0,
+                totalCount: 0,
+              }
+              const newTransactions = response.transactions || []
+              
+              setTransactionsState((current) => {
+                // Avoid duplicates
+                const existingIds = new Set(current.data.map(t => t.id))
+                const uniqueNewTransactions = newTransactions.filter(t => !existingIds.has(t.id))
+                loadingMore = false
+                return {
+                  ...current,
+                  data: [...current.data, ...uniqueNewTransactions],
+                  isLoadingMore: false,
+                  hasMore: pagination.page < pagination.totalPages,
+                  pagination,
+                }
+              })
+            })
+            .catch((error) => {
+              if (!isMounted) return
+              setTransactionsState((prev) => {
+                loadingMore = false
+                return {
+                  ...prev,
+                  isLoadingMore: false,
+                  error: error instanceof Error ? error.message : t("detail.transactions.error"),
+                }
+              })
+            })
+          
+          return { ...prev, isLoadingMore: true }
+        })
+      }
+    }
+    
+    window.addEventListener('scroll', handleScroll)
+    return () => {
+      isMounted = false
+      window.removeEventListener('scroll', handleScroll)
     }
   }, [accountId, t])
 
@@ -343,45 +449,111 @@ export default function AccountDetailPage() {
                   {t("detail.transactions.retry")}
                 </Button>
               </div>
-            ) : transactions.length === 0 ? (
+            ) : transactions.length === 0 && !transactionsState.isLoading ? (
               <div className="flex flex-col items-center justify-center space-y-2 py-10 text-center">
                 <Wallet className="h-8 w-8 text-muted-foreground" />
                 <p className="font-medium">{t("detail.transactions.emptyTitle")}</p>
                 <p className="text-sm text-muted-foreground">{t("detail.transactions.emptyDescription")}</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>{t("detail.transactions.table.date")}</TableHead>
-                      <TableHead>{t("detail.transactions.table.description")}</TableHead>
-                      <TableHead className="text-right">{t("detail.transactions.table.amount")}</TableHead>
-                      <TableHead>{t("detail.transactions.table.status")}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {transactions.map((transaction) => (
-                      <TableRow key={transaction.id}>
-                        <TableCell className="whitespace-nowrap">{formatDate(transaction.bookingDate)}</TableCell>
-                        <TableCell>
-                          <div className="font-medium">{transaction.description}</div>
-                          {/* Note: transaction_type/subType handling might need adjustment depending on Transaction interface */}
-                        </TableCell>
-                        <TableCell className="text-right font-mono font-semibold">
-                          {formatCurrency(transaction.amount, transaction.currency)}
-                        </TableCell>
-                        <TableCell>
-                          {/* Status might be removed or different in new DTO, checking safely */}
-                          <Badge variant="outline" className="capitalize">
-                            Completed
-                          </Badge>
-                        </TableCell>
+              <>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>{t("detail.transactions.table.date")}</TableHead>
+                        <TableHead>{t("detail.transactions.table.description")}</TableHead>
+                        <TableHead>{t("table.headers.type", { defaultValue: "Loại" })}</TableHead>
+                        <TableHead className="text-right">{t("detail.transactions.table.amount")}</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                    </TableHeader>
+                    <TableBody>
+                      {transactions.map((transaction) => {
+                        const getTransactionTypeLabel = (direction?: string) => {
+                          if (direction === 'CREDIT') return 'Thu nhập'
+                          if (direction === 'DEBIT') return 'Chi tiêu'
+                          return direction || '-'
+                        }
+                        const getTransactionTypeColor = (direction?: string) => {
+                          if (direction === 'CREDIT') return 'text-green-600 dark:text-green-400'
+                          if (direction === 'DEBIT') return 'text-red-600 dark:text-red-400'
+                          return 'text-gray-600'
+                        }
+                        return (
+                          <TableRow key={transaction.id}>
+                            <TableCell className="whitespace-nowrap">
+                              {transaction.bookingDate || transaction.booking_date ? (
+                                <div title={`Thời gian giao dịch: ${new Date(transaction.bookingDate || transaction.booking_date).toLocaleString('vi-VN')}`}>
+                                  {new Date(transaction.bookingDate || transaction.booking_date).toLocaleString('vi-VN', {
+                                    day: '2-digit',
+                                    month: '2-digit',
+                                    year: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}
+                                </div>
+                              ) : transaction.createdAt || transaction.created_at ? (
+                                <div title={`Tạo lúc: ${new Date(transaction.createdAt || transaction.created_at).toLocaleString('vi-VN')}`}>
+                                  {new Date(transaction.createdAt || transaction.created_at).toLocaleString('vi-VN', {
+                                    day: '2-digit',
+                                    month: '2-digit',
+                                    year: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground">-</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <div className="font-medium">{transaction.description || 'Không có mô tả'}</div>
+                              {transaction.reference && (
+                                <div className="text-xs text-muted-foreground font-mono mt-1">
+                                  Ref: {transaction.reference}
+                                </div>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1">
+                                {(transaction.direction === 'CREDIT' || (transaction as any).direction === 'CREDIT') ? (
+                                  <ArrowUpRight className="h-4 w-4 text-green-600" />
+                                ) : (
+                                  <ArrowDownRight className="h-4 w-4 text-red-600" />
+                                )}
+                                <span className="text-sm">
+                                  {getTransactionTypeLabel(transaction.direction || (transaction as any).direction)}
+                                </span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <span className={getTransactionTypeColor(transaction.direction || (transaction as any).direction)}>
+                                {(transaction.direction === 'CREDIT' || (transaction as any).direction === 'CREDIT') ? '+' : '-'}
+                                {formatCurrency(Math.abs(transaction.amount), transaction.currency)}
+                              </span>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+                
+                {/* Loading more indicator */}
+                {transactionsState.isLoadingMore && (
+                  <div className="text-center py-4">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto"></div>
+                    <p className="mt-2 text-sm text-muted-foreground">Đang tải thêm...</p>
+                  </div>
+                )}
+                
+                {/* End of list indicator */}
+                {!transactionsState.hasMore && transactions.length > 0 && !transactionsState.isLoadingMore && (
+                  <div className="text-center py-4">
+                    <p className="text-sm text-muted-foreground">Đã hiển thị tất cả giao dịch</p>
+                  </div>
+                )}
+              </>
             )}
           </CardContent>
         </Card>

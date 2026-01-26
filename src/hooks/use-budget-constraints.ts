@@ -5,7 +5,8 @@ import {
   fetchConstraintSummary,
   createConstraint,
   updateConstraint,
-  deleteConstraint,
+  archiveConstraint,
+  endConstraint,
   setSelectedConstraint,
 } from '@/features/budget-constraints/budgetConstraintsSlice'
 import type { CreateBudgetConstraintRequest, UpdateBudgetConstraintRequest, BudgetConstraint } from '@/services/api/types/budget-constraints'
@@ -48,9 +49,16 @@ export const useBudgetConstraints = () => {
     [dispatch]
   )
 
-  const removeConstraint = useCallback(
+  const archiveConstraintAction = useCallback(
     async (id: string) => {
-      return dispatch(deleteConstraint(id)).unwrap()
+      return dispatch(archiveConstraint(id)).unwrap()
+    },
+    [dispatch]
+  )
+
+  const endConstraintAction = useCallback(
+    async (id: string) => {
+      return dispatch(endConstraint(id)).unwrap()
     },
     [dispatch]
   )
@@ -72,7 +80,8 @@ export const useBudgetConstraints = () => {
     refreshSummary,
     addConstraint,
     editConstraint,
-    removeConstraint,
+    archiveConstraint: archiveConstraintAction,
+    endConstraint: endConstraintAction,
     selectConstraint,
   }
 }

@@ -302,9 +302,8 @@ export default function BudgetAllocationPage() {
 
     const getScenarioColor = (type: string) => {
         switch (type) {
-            case 'conservative': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+            case 'safe': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
             case 'balanced': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-            case 'aggressive': return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'
             default: return 'bg-gray-100 text-gray-800'
         }
     }
@@ -682,14 +681,13 @@ export default function BudgetAllocationPage() {
                     {result.scenarios.length > 1 ? (
                         <Tabs
                             defaultValue={selectedScenario?.scenario_type || "balanced"}
-                            onValueChange={(v) => dispatch(selectScenario(v as 'conservative' | 'balanced' | 'aggressive'))}
+                            onValueChange={(v) => dispatch(selectScenario(v as 'safe' | 'balanced'))}
                         >
-                            <TabsList className="grid w-full grid-cols-3">
+                            <TabsList className="grid w-full grid-cols-2">
                                 {result.scenarios.map((s) => (
                                     <TabsTrigger key={s.scenario_type} value={s.scenario_type} className="capitalize">
-                                        {s.scenario_type === 'conservative' && 'An toàn'}
-                                        {s.scenario_type === 'balanced' && 'Cân bằng'}
-                                        {s.scenario_type === 'aggressive' && 'Tích cực'}
+                                        {s.scenario_type === 'safe' && 'Safe'}
+                                        {s.scenario_type === 'balanced' && 'Balanced'}
                                     </TabsTrigger>
                                 ))}
                             </TabsList>

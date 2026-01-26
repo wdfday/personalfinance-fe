@@ -23,8 +23,37 @@ export const goalsService = {
     return apiClient.delete(`/goals/${id}`)
   },
 
-  async contribute(id: string, amount: number): Promise<Goal> {
-    return apiClient.post<Goal>(`/goals/${id}/contribute`, { amount })
+  async contribute(id: string, amount: number, accountId: string, note?: string, source?: string): Promise<Goal> {
+    return apiClient.post<Goal>(`/goals/${id}/contribute`, { amount, accountId, note, source })
+  },
+
+  async withdraw(id: string, amount: number, note?: string, reversingContributionId?: string): Promise<Goal> {
+    return apiClient.post<Goal>(`/goals/${id}/withdraw`, { 
+      amount, 
+      note, 
+      reversingContributionId: reversingContributionId || undefined 
+    })
+  },
+
+  async getContributions(id: string): Promise<{
+    contributions: Array<{
+      id: string
+      goalId: string
+      accountId: string
+      userId: string
+      type: 'deposit' | 'withdrawal'
+      amount: number
+      currency: string
+      note?: string
+      source: string
+      reversingContributionId?: string
+      createdAt: string
+    }>
+    totalDeposits: number
+    totalWithdrawals: number
+    netAmount: number
+  }> {
+    return apiClient.get(`/goals/${id}/contributions`)
   },
 
   async archive(id: string): Promise<Goal> {

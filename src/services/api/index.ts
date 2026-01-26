@@ -24,6 +24,7 @@ export { budgetAllocationService } from './services/budget-allocation.service'
 export { goalPrioritizationService } from './services/goal-prioritization.service'
 export { monthService } from './services/month.service'
 export { profileService } from './services/profile.service' // Backward compatibility
+export { financialProfileService } from './services/financial-profile.service'
 
 // Types - Auth
 export type { User, TokenInfo, AuthResponse, LoginRequest, RegisterRequest } from './types/auth'
@@ -124,6 +125,12 @@ export type {
   UserStatus,
   UpdateUserProfileRequest,
 } from './types/users'
+
+// Types - Profile
+export type {
+  Profile,
+  UpdateProfileRequest,
+} from './types/profile'
 
 // Types - Brokers
 export type {

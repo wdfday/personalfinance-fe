@@ -1,5 +1,5 @@
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
@@ -9,11 +9,14 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
-import { useAppDispatch } from "@/lib/hooks"
+import { useAppDispatch, useAppSelector } from "@/lib/hooks"
 import { createIncomeProfile } from "../incomeSlice"
+import { fetchCategories } from "@/features/categories/categoriesSlice"
+import { CategoryPickerPopover } from "@/components/categories/category-picker-popover"
 import { useToast } from "@/components/ui/use-toast"
 
 const formSchema = z.object({
+  category_id: z.string().min(1, "Category is required"),
   source: z.string().min(2, "Source name must be at least 2 characters"),
   amount: z.coerce.number().min(0, "Amount must be positive"),
   currency: z.string().default("VND"),
@@ -21,9 +24,6 @@ const formSchema = z.object({
   start_date: z.string().optional(),
   description: z.string().optional(),
   is_recurring: z.boolean().default(true),
-  // Basic breakdown fields optional for now
-  base_salary: z.coerce.number().optional(),
-  bonus: z.coerce.number().optional(),
 })
 
 interface CreateIncomeModalProps {
@@ -34,20 +34,27 @@ interface CreateIncomeModalProps {
 
 export function CreateIncomeModal({ open, onOpenChange, onSuccess }: CreateIncomeModalProps) {
   const dispatch = useAppDispatch()
+  const { categories } = useAppSelector((state) => state.categories)
   const { toast } = useToast()
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Fetch categories when modal opens
+  useEffect(() => {
+    if (open && categories.length === 0) {
+      dispatch(fetchCategories())
+    }
+  }, [open, categories.length, dispatch])
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
+      category_id: "",
       source: "",
       amount: 0,
       currency: "VND",
       frequency: "monthly",
       is_recurring: true,
       description: "",
-      base_salary: 0,
-      bonus: 0,
     },
   })
 
@@ -92,6 +99,26 @@ export function CreateIncomeModal({ open, onOpenChange, onSuccess }: CreateIncom
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField
               control={form.control}
+              name="category_id"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Category *</FormLabel>
+                  <FormControl>
+                    <CategoryPickerPopover
+                      categories={categories}
+                      value={field.value}
+                      onChange={field.onChange}
+                      placeholder="Chọn danh mục..."
+                      categoryType="income"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            
+            <FormField
+              control={form.control}
               name="source"
               render={({ field }) => (
                 <FormItem>
@@ -110,7 +137,7 @@ export function CreateIncomeModal({ open, onOpenChange, onSuccess }: CreateIncom
                   name="amount"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Total Amount</FormLabel>
+                      <FormLabel>Amount</FormLabel>
                       <FormControl>
                         <Input type="number" {...field} />
                       </FormControl>
