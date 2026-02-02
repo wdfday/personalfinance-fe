@@ -9,7 +9,7 @@ export const defaultLocale: Locale = "en"
 export const translations: Record<Locale, Dictionary> = {
   en: {
     common: {
-      appName: "Flowers&Saints",
+      appName: "Chrysol",
       language: {
         label: "Language",
         english: "English",

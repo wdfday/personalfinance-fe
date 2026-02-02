@@ -125,11 +125,13 @@ export default function TransactionsPage() {
     setIsDeleteModalOpen(true)
   }
 
-  // Local search filter
-  const filteredTransactions = transactions.filter(transaction =>
-    (transaction.description?.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (transaction.userNote?.toLowerCase().includes(searchTerm.toLowerCase()))
-  )
+  // Local search filter: chỉ lọc khi có searchTerm; ô trống thì hiển thị tất cả (kể cả giao dịch không có description/userNote)
+  const filteredTransactions = !searchTerm.trim()
+    ? transactions
+    : transactions.filter(transaction =>
+        (transaction.description?.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (transaction.userNote?.toLowerCase().includes(searchTerm.toLowerCase()))
+      )
 
   const formatCurrency = (amount: number, currency: string = 'VND') => {
     if (currency === 'VND') {

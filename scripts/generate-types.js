@@ -63,7 +63,7 @@ async function main() {
     console.log('✅ Types generated successfully!');
     console.log(`   Output file: ${OUTPUT_PATH}/api-types.ts`);
   } catch (error) {
-    console.error('❌ Failed to generate types:', error.message);
+    console.error('Failed to generate types:', error.message);
     process.exit(1);
   }
 }
